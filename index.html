@@ -2,19 +2,38 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
 <title>Rescate Felino — Natalia y los siete gatos</title>
 <style>
+  :root{
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;height:100%;background:#14161c;overflow:hidden;
-    font-family:'Nunito',system-ui,sans-serif;touch-action:none;user-select:none;}
-  #wrap{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
-  #stage{position:relative;width:min(100vw, calc(100vh * 16 / 9));
-         height:min(100vh, calc(100vw * 9 / 16));}
-  canvas{display:block;width:100%;height:100%;background:#c1663f;}
+  html,body{
+    margin:0;padding:0;width:100%;height:100%;min-height:100dvh;
+    overflow:hidden;background:#000;overscroll-behavior:none;
+    font-family:'Nunito',system-ui,sans-serif;touch-action:none;user-select:none;
+  }
+  body{position:fixed;inset:0;}
+  #wrap{
+    position:fixed;inset:0;width:100vw;height:100dvh;min-height:100dvh;
+    display:block;overflow:hidden;background:#000;
+  }
+  #stage{
+    position:relative;width:100vw;height:100dvh;min-height:100dvh;
+    max-width:none;max-height:none;margin:0;border:0;border-radius:0;overflow:hidden;
+    background:#c1663f;
+  }
+  canvas{
+    display:block;width:100vw;height:100dvh;max-width:none;max-height:none;
+    margin:0;background:#c1663f;
+  }
 
   /* ---- HUD: anclado a los bordes, nunca sobre la zona jugable central ---- */
   #hud{position:absolute;inset:0;pointer-events:none;font-family:'Baloo 2',sans-serif;}
@@ -23,12 +42,20 @@
     border:1.5px solid rgba(255,220,190,.28);border-radius:999px;
     padding:5px 13px;color:#fff;font-weight:800;font-size:clamp(11px,1.55vw,17px);
     letter-spacing:.3px;text-shadow:0 1px 3px rgba(0,0,0,.6);white-space:nowrap;}
-  #pHearts{top:2.2%;left:1.6%;}
-  #pCats{top:2.2%;left:50%;transform:translateX(-50%);}
-  #pItems{top:2.2%;right:1.6%;gap:14px;}
+  #pHearts{top:calc(1.4% + var(--safe-top));left:calc(1.6% + var(--safe-left));}
+  #pCats{top:calc(1.4% + var(--safe-top));left:50%;transform:translateX(-50%);}
+  #pItems{top:calc(1.4% + var(--safe-top));right:calc(6.4% + var(--safe-right));gap:14px;}
+  #fullscreenBtn{position:absolute;top:calc(1.4% + var(--safe-top));right:calc(1.6% + var(--safe-right));
+    pointer-events:auto;display:flex;align-items:center;justify-content:center;
+    width:clamp(38px,5.2vw,54px);height:clamp(38px,5.2vw,54px);
+    border:1.5px solid rgba(255,220,190,.28);border-radius:50%;
+    background:rgba(18,14,24,.55);backdrop-filter:blur(4px);color:#fff;
+    font-size:clamp(16px,2.2vw,22px);font-weight:800;line-height:1;
+    box-shadow:0 4px 16px rgba(0,0,0,.25);}
+  #fullscreenBtn:active{transform:scale(.95);} 
   .heart{filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
   .heart.gone{opacity:.24;filter:grayscale(1);}
-  #homeCue{position:absolute;top:11%;left:50%;transform:translateX(-50%);
+  #homeCue{position:absolute;top:calc(11% + var(--safe-top));left:50%;transform:translateX(-50%);
     background:rgba(255,214,102,.94);color:#41240a;border-radius:999px;
     padding:6px 20px;font-weight:800;font-size:clamp(11px,1.7vw,18px);
     font-family:'Baloo 2',sans-serif;display:none;align-items:center;gap:9px;
@@ -41,13 +68,13 @@
     backdrop-filter:blur(3px);text-shadow:0 1px 3px rgba(0,0,0,.5);}
   .btn:active{background:rgba(255,255,255,.34);transform:scale(.94);}
   .dpad{width:clamp(48px,7.4vw,78px);height:clamp(48px,7.4vw,78px);
-        bottom:5%;font-size:clamp(19px,2.9vw,30px);}
-  #bLeft{left:2.2%;} #bRight{left:calc(2.2% + clamp(56px,8.6vw,92px));}
-  #bJump{right:2.2%;bottom:5%;width:clamp(60px,9.2vw,98px);height:clamp(60px,9.2vw,98px);
+        bottom:calc(4% + var(--safe-bottom));font-size:clamp(19px,2.9vw,30px);}
+  #bLeft{left:calc(2.2% + var(--safe-left));} #bRight{left:calc(2.2% + var(--safe-left) + clamp(56px,8.6vw,92px));}
+  #bJump{right:calc(2.2% + var(--safe-right));bottom:calc(4% + var(--safe-bottom));width:clamp(60px,9.2vw,98px);height:clamp(60px,9.2vw,98px);
          font-size:clamp(21px,3.2vw,34px);}
-  #bCall{right:calc(2.2% + clamp(68px,10.4vw,112px));bottom:6.5%;
+  #bCall{right:calc(2.2% + var(--safe-right) + clamp(68px,10.4vw,112px));bottom:calc(5.2% + var(--safe-bottom));
          width:clamp(44px,6.6vw,70px);height:clamp(44px,6.6vw,70px);font-size:clamp(16px,2.4vw,26px);}
-  #bChuru{right:calc(2.2% + clamp(122px,18.4vw,198px));bottom:6.5%;
+  #bChuru{right:calc(2.2% + var(--safe-right) + clamp(122px,18.4vw,198px));bottom:calc(5.2% + var(--safe-bottom));
           width:clamp(44px,6.6vw,70px);height:clamp(44px,6.6vw,70px);font-size:clamp(16px,2.4vw,26px);}
   .btn .badge{position:absolute;bottom:-3px;right:-3px;background:#ffd166;color:#3a2205;
     border-radius:999px;min-width:19px;height:19px;font-size:11px;line-height:19px;
@@ -56,7 +83,7 @@
 
   /* ---- Pantallas ---- */
   .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
-    justify-content:center;text-align:center;padding:5% 8%;color:#fff;
+    justify-content:center;text-align:center;padding:calc(5% + var(--safe-top)) calc(8% + var(--safe-right)) calc(5% + var(--safe-bottom)) calc(8% + var(--safe-left));color:#fff;
     background:radial-gradient(ellipse at center, rgba(38,20,44,.82), rgba(12,8,16,.95));
     font-family:'Baloo 2',sans-serif;pointer-events:auto;}
   .screen h1{margin:0 0 10px;font-size:clamp(22px,4.4vw,46px);line-height:1.1;
@@ -70,7 +97,7 @@
   .screen button:active{transform:translateY(2px);}
   #rotate{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
     justify-content:center;background:rgba(20,22,28,.94);color:#fff;z-index:50;text-align:center;
-    padding:24px;font-family:'Baloo 2',sans-serif;pointer-events:auto;}
+    padding:calc(24px + var(--safe-top)) calc(24px + var(--safe-right)) calc(24px + var(--safe-bottom)) calc(24px + var(--safe-left));font-family:'Baloo 2',sans-serif;pointer-events:auto;}
   #rotate .ico{font-size:46px;animation:tip 1.6s ease-in-out infinite;}
   #rotate p{font-size:14px;opacity:.85;margin:6px 0 0;}
   #rotate button{margin-top:16px;padding:9px 26px;border:0;border-radius:999px;
@@ -89,6 +116,7 @@
     <canvas id="game" width="1280" height="720"></canvas>
 
     <div id="hud">
+      <button id="fullscreenBtn" type="button" aria-label="Pantalla completa">⛶</button>
       <div class="panel" id="pHearts"><span id="hearts">❤️❤️❤️</span></div>
       <div class="panel" id="pCats">🐾 <span id="catCount">0/7</span></div>
       <div class="panel" id="pItems">
@@ -217,6 +245,11 @@ const VOICE_CLIPS = { "¡Besito a la mamá!":null, "¿Dónde está mi amor?":nul
    ========================================================================== */
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const W = 1280, H = 720;
+let viewportW = Math.max(1, window.innerWidth || W);
+let viewportH = Math.max(1, window.innerHeight || H);
+let renderScale = 1;
+let renderOffsetX = 0;
+let renderOffsetY = 0;
 const GROUND_Y = 620;                 // línea de pasto donde se paran los pies
 const LEVEL_W = 5208;                 // conserva el ancho jugable existente
 const HOME = {x0:300, x1:760, cx:520};
@@ -1434,7 +1467,30 @@ function drawSultanReveal(){
   }
 }
 
+function resizeCanvas(){
+  const nextW = window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || W;
+  const nextH = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || H;
+  viewportW = Math.max(1, Math.round(nextW));
+  viewportH = Math.max(1, Math.round(nextH));
+  cv.width = Math.round(viewportW * Math.min(window.devicePixelRatio || 1, 2));
+  cv.height = Math.round(viewportH * Math.min(window.devicePixelRatio || 1, 2));
+  cv.style.width = viewportW + 'px';
+  cv.style.height = viewportH + 'px';
+  renderScale = Math.min(viewportW / W, viewportH / H);
+  renderOffsetX = Math.max(0, (viewportW - (W * renderScale)) / 2);
+  renderOffsetY = Math.max(0, (viewportH - (H * renderScale)) / 2);
+  applyViewportTransform();
+}
+
+function applyViewportTransform(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(dpr * renderScale, 0, 0, dpr * renderScale, renderOffsetX * dpr, renderOffsetY * dpr);
+}
+
 function draw(){
+  applyViewportTransform();
   ctx.save();
   if(S.shakeT>0){
     ctx.translate((Math.random()-0.5)*S.shakeT*0.8, (Math.random()-0.5)*S.shakeT*0.6);
@@ -1512,13 +1568,44 @@ function win(){
   scWin.style.display="flex";
 }
 const rot = document.getElementById('rotate');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+async function enterFullscreen(){
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    }
+    if (screen.orientation?.lock) {
+      await screen.orientation.lock('landscape').catch(()=>{});
+    }
+  } catch (error) {
+    console.warn('Fullscreen no disponible:', error);
+  }
+}
+
 document.getElementById('rotateOk').onclick = ()=> rot.classList.remove('armed');
-document.getElementById('startBtn').onclick = start;
-document.getElementById('retryBtn').onclick = start;
-document.getElementById('againBtn').onclick = start;
+document.getElementById('startBtn').onclick = async ()=>{
+  await enterFullscreen();
+  start();
+};
+document.getElementById('retryBtn').onclick = async ()=>{
+  await enterFullscreen();
+  start();
+};
+document.getElementById('againBtn').onclick = async ()=>{
+  await enterFullscreen();
+  start();
+};
+fullscreenBtn.onclick = async ()=>{
+  await enterFullscreen();
+};
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', resizeCanvas);
+window.addEventListener('fullscreenchange', resizeCanvas);
+window.visualViewport?.addEventListener('resize', resizeCanvas);
 
 /* primer render para que se vea el patio detrás del menú */
-reset(); draw();
+reset(); resizeCanvas(); draw();
 </script>
 </body>
 </html>
