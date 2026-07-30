@@ -1,0 +1,42 @@
+# Variables y secretos
+.env
+.env.*
+!.env.example
+
+# Dependencias
+node_modules/
+
+# Resultados de compilación
+dist/
+build/
+
+# Archivos locales de Vercel
+.vercel/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Temporales
+*.tmp
+*.temp

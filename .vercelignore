@@ -1,0 +1,6 @@
+backups/
+references/
+tools/
+__pycache__/
+*.py
+*.pyc
