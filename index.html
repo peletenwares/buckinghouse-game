@@ -253,6 +253,11 @@ let renderOffsetY = 0;
 const GROUND_Y = 620;                 // línea de pasto donde se paran los pies
 const LEVEL_W = 5208;                 // conserva el ancho jugable existente
 const HOME = {x0:300, x1:760, cx:520};
+const CAT_SCALE = 1.35;
+const HUMAN_SCALE = CAT_SCALE * 1.2;
+const PLATFORM_SCALE = 1.24;
+const BALL_SCALE = 1.15;
+const ITEM_SCALE = 1.2;
 
 /* Sultán es el favorito: no existe en el patio hasta que los otros seis
    están rescatados, y sólo aparece en la zona final, la más difícil. */
@@ -269,7 +274,7 @@ const CATS_DEF = [
 ];
 
 /* Obstáculos: mobiliario de gatos, nada de bloques flotantes */
-const PLATFORM_DEF = [
+const PLATFORM_BASE = [
   {x:1180, y:556, w:96,  h:64,  t:"comedero"},
   {x:1430, y:534, w:112, h:86,  t:"casita"},
   {x:1760, y:562, w:150, h:58,  t:"cama"},
@@ -289,6 +294,12 @@ const PLATFORM_DEF = [
   {x:5010, y:404, w:130, h:44,  t:"puente"},
   {x:5150, y:566, w:118, h:54,  t:"transportadora"}
 ];
+const PLATFORM_DEF = PLATFORM_BASE.map(p => ({
+  ...p,
+  w: p.w * PLATFORM_SCALE,
+  h: p.h * PLATFORM_SCALE,
+  y: p.y - (p.h * (PLATFORM_SCALE - 1))
+}));
 /* Adorno de suelo, sin colisión */
 const DECOR_DEF = [
   {x:1330,t:"raton"},{x:1900,t:"ovillo"},{x:2350,t:"pelota"},{x:2760,t:"raton"},
@@ -312,8 +323,8 @@ function reset(){
     cats: CATS_DEF.map(c=>({...c, state: c.final ? "hidden" : "free",
                             vx:0, vy:0, onGround:true, face:-1,
                             walkT:Math.random()*6, hopT:0, lured:0, mark:0, panic:0})),
-    alexis:{x:1650,y:GROUND_Y,face:-1,state:"idle",timer:0,cool:150,walkT:0,
-            targetX:1650, moveCd:260, pending:null, shot:null,
+    alexis:{x:1650,y:GROUND_Y,face:-1,state:"idle",timer:0,cool:180,walkT:0,
+            targetX:1650, moveCd:140, pending:null, shot:null,
             kickFrame:0, kickFired:false},
     balls:[], warns:[], pops:[],
     items: buildItems(),
@@ -498,8 +509,8 @@ function pop(x,y,txt){ S.pops.push({x,y,txt,t:0}); }
 /* ==========================================================================
    FÍSICA / COLISIONES
    ========================================================================== */
-const NAT_W = 34, NAT_H = 112, NAT_DRAW_H = 116;
-const CAT_H = 54, CAT_SPACING = 62;
+const NAT_W = 34 * HUMAN_SCALE, NAT_H = 112 * HUMAN_SCALE, NAT_DRAW_H = 116 * HUMAN_SCALE;
+const CAT_H = 54 * CAT_SCALE, CAT_SPACING = 62 * CAT_SCALE;
 const CAT_ATLAS_CELL_W = 520, CAT_ATLAS_CELL_H = 220, CAT_ATLAS_BODY_H = 180;
 const CAT_ATLAS_DRAW_H = CAT_H * (CAT_ATLAS_CELL_H / CAT_ATLAS_BODY_H);
 const CAT_WALK_FPS = 10;
@@ -522,7 +533,7 @@ const ALEXIS_KICK_FRAME_TICKS = Math.max(1, Math.round(60 / ALEXIS_KICK_FPS));
 const ALEXIS_KICK_START_FRAME = 1;
 const ALEXIS_KICK_CONTACT_FRAME = 3;
 const ALEXIS_KICK_CONTACT_DELAY_TICKS = Math.max(0, (ALEXIS_KICK_CONTACT_FRAME - ALEXIS_KICK_START_FRAME) * ALEXIS_KICK_FRAME_TICKS);
-const ALEXIS_DRAW_H = 133;
+const ALEXIS_DRAW_H = 133 * HUMAN_SCALE;
 
 function platformsUnder(x, w, prevBottom, bottom){
   for(const p of PLATFORM_DEF){
@@ -650,9 +661,9 @@ function tier(){
   return 2;
 }
 const TIER = [
-  {maxBalls:1, gap:[175,235], warn:54, speed:1.10, types:["alta","alta","media"]},
-  {maxBalls:2, gap:[105,150], warn:38, speed:1.23, types:["alta","media","media","rebote"]},
-  {maxBalls:4, gap:[68,104],  warn:26, speed:1.34, types:["media","baja","rebote","alta"]}
+  {maxBalls:1, gap:[245,329], warn:54, speed:0.825, types:["alta","alta","media"]},
+  {maxBalls:1, gap:[147,210], warn:38, speed:0.9225, types:["alta","media","media","rebote"]},
+  {maxBalls:1, gap:[95,145],  warn:26, speed:1.005, types:["media","baja","rebote","alta"]}
 ];
 
 function beginAlexisKick(a, shot){
@@ -665,6 +676,11 @@ function beginAlexisKick(a, shot){
 
 function updateAlexis(){
   const a = S.alexis, T = TIER[tier()];
+
+  if(S.t < 180){
+    a.cool = Math.max(a.cool, 180 - S.t);
+    return;
+  }
 
   /* se reubica por el escenario, manteniendo distancia jugable */
   if(a.moveCd>0) a.moveCd--;
@@ -745,7 +761,7 @@ function planShot(T){
   const dev = (48 + Math.random()*145) * (Math.random()<.5?-1:1);
   let landX = S.nat.x + lead + dev;
   /* nunca justo encima ni dentro de Natalia: siempre queda ruta de escape */
-  if(Math.abs(landX - S.nat.x) < 66) landX = S.nat.x + Math.sign(landX-S.nat.x||1)*66;
+  if(Math.abs(landX - S.nat.x) < 90) landX = S.nat.x + Math.sign(landX-S.nat.x||1)*90;
   landX = Math.max(160, Math.min(LEVEL_W-160, landX));
 
   let dist = landX - originX;
@@ -757,7 +773,7 @@ function planShot(T){
 }
 
 function launch(s){
-  S.balls.push({x:s.x, y:s.y, vx:s.vx, vy:s.vy, G:s.G, r:15,
+  S.balls.push({x:s.x, y:s.y, vx:s.vx, vy:s.vy, G:s.G, r:15 * BALL_SCALE,
                 type:s.type, bounces:s.type==="rebote"?2:0, spin:0, life:0, rolling:false});
   S.warns = S.warns.filter(w=>Math.abs(w.x - s.landX) > 4);
 }
@@ -788,7 +804,8 @@ function updateBalls(){
     for(const c of S.cats){
       if(c.state!=="free") continue;
       const d = Math.hypot(b.x-c.x, b.y-(c.y-26));
-      if(d < 30 && !b.hitCat){                       // pelotazo directo: arranca lejos
+      const catHitR = 30 * 1.12;
+      if(d < catHitR && !b.hitCat){                       // pelotazo directo: arranca lejos
         b.hitCat = true; b.dead = true; puffAt(b.x);
         const dir = Math.sign(c.x - b.x) || 1;
         const k = c.final ? 0.45 : 1;                // el regalón se mueve menos
@@ -810,9 +827,9 @@ function updateBalls(){
       if(hit){
         b.dead = true; puffAt(b.x);
         if(S.shield>0){ pop(n.x, n.y-NAT_H-8, "✨"); S.shield = Math.max(0,S.shield-90); }
-        else if(S.caravan.length>0){ loseCat(); n.inv=95; n.hurtT=22; S.shakeT=12; }
+        else if(S.caravan.length>0){ loseCat(); n.inv=90; n.hurtT=22; S.shakeT=12; }
         else {
-          n.hearts--; n.inv=110; n.hurtT=26; S.shakeT=16;
+          n.hearts--; n.inv=90; n.hurtT=26; S.shakeT=16;
           pop(n.x, n.y-NAT_H-10, "💔");
           syncHUD();
           if(n.hearts<=0) gameOver();
@@ -832,7 +849,7 @@ function updateItems(){
   const n = S.nat;
   for(const it of S.items){
     if(it.got) continue;
-    if(Math.abs(it.x-n.x) < 34 && Math.abs(it.y-(n.y-NAT_H/2)) < 78){
+    if(Math.abs(it.x-n.x) < 34 * ITEM_SCALE && Math.abs(it.y-(n.y-NAT_H/2)) < 78 * ITEM_SCALE){
       it.got = true;
       if(it.t==="food"){ S.food++; }
       else if(it.t==="churu"){ S.churu++; toast("🍥 Churu guardado (X)"); }
@@ -1192,15 +1209,15 @@ function drawItems(){
     const by = Math.sin(S.t*0.06 + it.bob)*4;
     ctx.save();
     if(it.t==="food"){
-      ctx.font="24px serif";
+      ctx.font=`${24 * ITEM_SCALE}px serif`;
       ctx.shadowColor="rgba(255,200,90,.85)"; ctx.shadowBlur=12;
       ctx.fillText("🍖", x, it.y+by);
     } else {
       const glyph = {churu:"🍥", call:"📢", salto:"🐾", olfato:"👃"}[it.t];
       ctx.shadowColor="rgba(255,255,255,.9)"; ctx.shadowBlur=18;
       ctx.fillStyle="rgba(255,255,255,.2)";
-      ctx.beginPath(); ctx.arc(x, it.y+by, 21, 0, Math.PI*2); ctx.fill();
-      ctx.font="27px serif"; ctx.fillText(glyph, x, it.y+by);
+      ctx.beginPath(); ctx.arc(x, it.y+by, 21 * ITEM_SCALE, 0, Math.PI*2); ctx.fill();
+      ctx.font=`${27 * ITEM_SCALE}px serif`; ctx.fillText(glyph, x, it.y+by);
     }
     ctx.restore();
   }
@@ -1284,7 +1301,7 @@ function drawCats(){
 /* El muestreo por distancia falla si Natalia repasa su propio camino
    (saltar en el sitio, ir y volver): ahí el rastro se pliega y los gatos
    caerían encima. Este pase final los separa siempre. */
-const MIN_SEP = 50;
+const MIN_SEP = 60;
 function caravanPositions(){
   const out = [];
   let prev = {x:S.nat.x, y:S.nat.y};
@@ -1318,7 +1335,7 @@ function drawCaravan(){
 function drawNatalia(){
   const n = S.nat;
   const air = Math.max(0, GROUND_Y - n.y);
-  shadow(n.x, GROUND_Y, 48, air);
+  shadow(n.x, GROUND_Y, 48 * (HUMAN_SCALE / CAT_SCALE), air);
   const blink = n.inv>0 ? (Math.floor(S.t/4)%2 ? 0.35 : 1) : 1;
   ctx.save();
   if(S.shield>0){
@@ -1338,7 +1355,7 @@ function drawNatalia(){
 
 function drawAlexis(){
   const a = S.alexis;
-  shadow(a.x, GROUND_Y, 56, 0);
+  shadow(a.x, GROUND_Y, 56 * (HUMAN_SCALE / CAT_SCALE), 0);
   let frame = 0;
   if(a.state==="windup") frame = 1;
   else if(a.state==="kick") frame = a.kickFrame || 0;
