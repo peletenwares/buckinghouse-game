@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 4 completada — Fase 5 (Dificultad progresiva) pendiente.
+Fase 5 completada — Fase 6 (Final dorado) pendiente.
 
 ## Completado
 
@@ -158,9 +158,69 @@ Fase 4 completada — Fase 5 (Dificultad progresiva) pendiente.
 - `index.html` y Etapa 1 sin modificaciones; sin regresiones.
 - Working tree limpio tras commit.
 
+### Fase 5 — Dificultad progresiva (2026-07-30) — commit c5fca90
+
+**Archivos modificados:**
+- `src/stages/stage2/stage2.js` — escenas dinámicas, reducción de Zzz, movimiento de blancos por carriles.
+
+**Mecánica implementada:**
+
+**Escenas dinámicas según alarma:**
+- 0–39%: `scene-sleeping.png`
+- 40–64%: `scene-reacting-1.png`
+- 65–84%: `scene-reacting-2.png`
+- 85–100%: `scene-yawning.png`
+- Cambio instantáneo y estable; sin parpadeo; sin retroceso.
+- Fallos de carga de escena obligatoria reportados con `console.error` + ruta exacta.
+
+**Zzz progresivas:**
+- 0–39%: 3 Zzz visibles.
+- 40–64%: 2 Zzz.
+- 65–84%: 1 Zzz.
+- 85–100%: 0 Zzz.
+
+**Movimiento de blancos por carriles independientes:**
+- 0–39%: blancos estáticos.
+- 40–64%: movimiento lento (30–50 px/s).
+- 65–84%: velocidad media (70–110 px/s).
+- 85–100%: velocidad alta (130–170 px/s).
+- Al subir de nivel, la dirección se conserva y solo aumenta la magnitud. No se reasigna ángulo.
+- Primera asignación usa ángulo restringido 25°–65°; magnitud exacta = speed (identidad trigonométrica).
+- Signos iniciales distintos por blanco para evitar movimiento sincronizado.
+- Rebote elástico en los límites del carril propio (`t.bounds`); clamping en el mismo frame.
+
+**Carriles horizontales sin superposición visual (ancho renderizado = 230 px):**
+
+| Carril | xMin | xMax | borde visual derecho | gap al siguiente |
+|--------|------|------|----------------------|-----------------|
+| Izquierdo | 220 | 330 | 560 | +10 px |
+| Central | 570 | 650 | 880 | +10 px |
+| Derecho | 890 | 1020 | 1250 | — |
+
+**Bounds verticales y posiciones iniciales:**
+
+| # | x inicial | y inicial | xMin | xMax | yMin | yMax |
+|---|-----------|-----------|------|------|------|------|
+| 0 (izquierdo) | 220 | 65 | 220 | 330 | 45 | 85 |
+| 1 (central) | 600 | 50 | 570 | 650 | 35 | 70 |
+| 2 (derecho) | 1000 | 50 | 890 | 1020 | 35 | 70 |
+
+- Blancos elevados para no cubrir caras, cabezas, HUD ni resortera.
+- Posiciones iniciales dentro de sus bounds: sin salto al iniciar el movimiento.
+
+**Preservado íntegramente:**
+- Colisión continua (segmento–punto), puntaje, progreso de alarma, cooldown hot, resortera, proyectiles, HUD.
+
+**Variable de estado añadida:** `_diffLevel` (0|1|2|3) — reseteada en `stop()` y `devStart()`.
+
+**Verificación:**
+- Sintaxis JS validada con `node --check`.
+- Validación visual completada en `http://localhost:5500/stage2-dev.html`.
+- `index.html` y Etapa 1 sin modificaciones; sin regresiones.
+- Working tree limpio tras commit.
+
 ## Pendiente
 
-- Fase 5: Dificultad progresiva
 - Fase 6: Final dorado
 - Fase 7: Integración con Etapa 1
 
