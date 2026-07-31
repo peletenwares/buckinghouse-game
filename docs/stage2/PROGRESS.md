@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 5 completada — Fase 6 (Final dorado) pendiente.
+Fase 6 completada — Fase 7 (Integración con Etapa 1) pendiente.
 
 ## Completado
 
@@ -219,9 +219,60 @@ Fase 5 completada — Fase 6 (Final dorado) pendiente.
 - `index.html` y Etapa 1 sin modificaciones; sin regresiones.
 - Working tree limpio tras commit.
 
+### Fase 6 — Cierre dorado (2026-07-31) — commit badca22
+
+**Archivos modificados:**
+- `src/stages/stage2/stage2.js` — estado `completed`, función `completeStage()`, mensaje final, bloqueo de input.
+
+**Estado interno añadido:** `_phase` (`'playing'` | `'completed'`) — única fuente de verdad sobre si la partida terminó.
+
+**Transición a `completed`:**
+- Ocurre de forma atómica dentro del bucle de colisiones, inmediatamente después de que un impacto lleva `_alarm` a 100%.
+- Los bucles `forEach` se reemplazaron por `for` anidados con etiqueta `outer:` para permitir `break outer` en cuanto `completeStage()` se ejecuta.
+- Ningún otro impacto del mismo frame puede sumar puntaje ni avanzar la alarma.
+- `completeStage()` incluye un guard `if (_phase !== 'playing') return` — es idempotente.
+
+**Efectos de la transición (todos en `completeStage()`):**
+- `_phase` cambia a `'completed'`.
+- Los tres blancos reciben `vx = 0; vy = 0` — movimiento detenido inmediatamente.
+- Los tres blancos reciben `hot = false; hotTimer = 0` — sin alternancia visual.
+- `cancelDrag()` fuerza la resortera a estado `idle` aunque hubiera un arrastre activo.
+
+**Bloqueo de input:**
+- `onPointerDown` retorna inmediatamente si `_phase !== 'playing'` — ningún nuevo reloj puede lanzarse.
+
+**Proyectiles existentes al momento de la transición:**
+- Continúan su física (paso 4 del loop, sin gate).
+- No colisionan ni puntúan (paso 5 bloqueado por `_phase === 'playing'`).
+- Se filtran naturalmente al salir del canvas (paso 6, sin gate).
+
+**`targetGold` estable:**
+- Con `hot = false`, `drawScene()` renderiza `t.restAsset` = `'targetGold'` sin alternancia ni movimiento.
+
+**Mensaje final:**
+- Texto exacto: `"No hay caso… no hay cómo despertarlos."`
+- Renderizado en Canvas 2D mediante `drawCompletionMessage()` — capa 8, encima del HUD.
+- Configuración centralizada en `C.completionMessage` (texto, fuente, padding, altura, colores, borde, shadowBlur) — sin literales en la función.
+- Caja semitransparente (`rgba(0,0,0,0.68)`) con borde blanco (`rgba(255,255,255,0.55)`), centrada horizontal y verticalmente en `centerY = 360`.
+- Aparece solo cuando `_phase === 'completed'`; estable y permanente.
+
+**HUD y escena preservados:**
+- `drawHUD()` continúa mostrando el score final y `ALARMA: 100%` con barra llena.
+- `getSceneKey(100)` devuelve `'sceneYawning'` — la escena de bostezo permanece como fondo final.
+- Las Zzz: `getZzzCount(100)` devuelve `0` — ya no se renderizan.
+
+**Reset en `stop()` y `devStart()`:**
+- Ambas funciones asignan `_phase = 'playing'` junto a `_score = 0`, `_alarm = 0`, `_diffLevel = 0`.
+- Al recargar `stage2-dev.html` o llamar `stop()` + `devStart()`, la partida comienza desde cero en estado `playing`.
+
+**Verificación:**
+- Sintaxis JS validada con `node --check`.
+- Validación visual completada en `http://localhost:5500/stage2-dev.html`.
+- `index.html`, `manifest.js`, `stage2-dev.html` y Etapa 1 sin modificaciones; sin regresiones.
+- Working tree limpio tras commit.
+
 ## Pendiente
 
-- Fase 6: Final dorado
 - Fase 7: Integración con Etapa 1
 
 ## Decisiones
