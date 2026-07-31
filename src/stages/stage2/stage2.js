@@ -93,6 +93,20 @@
       colorBarBorder: '#fff',
       barBorderWidth: 1,
     },
+
+    completionMessage: {
+      text:        'No hay caso… no hay cómo despertarlos.',
+      font:        'bold 34px monospace',
+      padding:     20,
+      boxHeight:   64,
+      centerY:     360,
+      colorBox:    'rgba(0,0,0,0.68)',
+      colorBorder: 'rgba(255,255,255,0.55)',
+      borderWidth: 2,
+      colorText:   '#ffffff',
+      shadowColor: '#000000',
+      shadowBlur:  8,
+    },
   };
 
   // Escenas obligatorias para Fase 5. Fallos se reportan con console.error.
@@ -130,6 +144,7 @@
   var _alarm     = 0;   // 0–100
   var _targets   = null; // inicializado en initTargets()
   var _diffLevel = 0;    // 0|1|2|3 — nivel de dificultad activo
+  var _phase     = 'playing'; // 'playing' | 'completed'
 
   // — Refs de handlers para cleanup —
   var _pdownFn, _pmoveFn, _pupFn, _pcancelFn, _plostFn;
@@ -327,6 +342,7 @@
   // ---------------------------------------------------------------------------
 
   function onPointerDown(e) {
+    if (_phase !== 'playing') return;
     if (_state !== 'idle') return;
     var v  = toVirtual(e.clientX, e.clientY);
     var pk = pocketPos();
@@ -391,6 +407,20 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Cierre de etapa
+  // ---------------------------------------------------------------------------
+
+  function completeStage() {
+    if (_phase !== 'playing') return;
+    _phase = 'completed';
+    _targets.forEach(function (t) {
+      t.vx = 0; t.vy = 0;
+      t.hot = false; t.hotTimer = 0;
+    });
+    cancelDrag();
+  }
+
+  // ---------------------------------------------------------------------------
   // Loop
   // ---------------------------------------------------------------------------
 
@@ -422,14 +452,16 @@
     });
 
     // 2 — Dificultad progresiva: nivel sube con la alarma, nunca baja
-    var newLevel = getDifficultyLevel(_alarm);
-    if (newLevel > _diffLevel) {
-      _diffLevel = newLevel;
-      assignTargetVelocities(_diffLevel);
+    if (_phase === 'playing') {
+      var newLevel = getDifficultyLevel(_alarm);
+      if (newLevel > _diffLevel) {
+        _diffLevel = newLevel;
+        assignTargetVelocities(_diffLevel);
+      }
     }
 
     // 3 — Mover blancos (rebote en t.bounds)
-    updateTargets(dt);
+    if (_phase === 'playing') updateTargets(dt);
 
     // 4 — Física: guardar posición anterior, luego avanzar
     _projectiles.forEach(function (p) {
@@ -442,25 +474,33 @@
     });
 
     // 5 — Detección de colisión continua
-    var combined = C.targetHitRadius + C.projectileHitRadius;
-    _projectiles.forEach(function (p) {
-      if (p.consumed) return;
-      _targets.forEach(function (t) {
-        if (p.consumed) return;
-        var cx   = t.x + t.collisionOffsetX;
-        var cy   = t.y + t.collisionOffsetY;
-        var dist = pointSegmentDist(cx, cy, p.prevX, p.prevY, p.x, p.y);
-        if (dist <= combined) {
-          p.consumed = true;
-          if (!t.hot) {
-            t.hot      = true;
-            t.hotTimer = C.hotDuration;
-            _score    += C.scorePerHit;
-            _alarm     = Math.min(100, _alarm + C.alarmPerHit);
+    if (_phase === 'playing') {
+      var combined = C.targetHitRadius + C.projectileHitRadius;
+      outer: for (var pi = 0; pi < _projectiles.length; pi++) {
+        var p = _projectiles[pi];
+        if (p.consumed) continue;
+        for (var ti = 0; ti < _targets.length; ti++) {
+          var t   = _targets[ti];
+          var cx  = t.x + t.collisionOffsetX;
+          var cy  = t.y + t.collisionOffsetY;
+          var d   = pointSegmentDist(cx, cy, p.prevX, p.prevY, p.x, p.y);
+          if (d <= combined) {
+            p.consumed = true;
+            if (!t.hot) {
+              t.hot      = true;
+              t.hotTimer = C.hotDuration;
+              _score    += C.scorePerHit;
+              _alarm     = Math.min(100, _alarm + C.alarmPerHit);
+              if (_alarm >= 100) {
+                completeStage();
+                break outer;
+              }
+            }
+            break;
           }
         }
-      });
-    });
+      }
+    }
 
     // 6 — Eliminar proyectiles consumidos o fuera de canvas
     _projectiles = _projectiles.filter(function (p) {
@@ -536,6 +576,27 @@
     ctx.restore();
   }
 
+  function drawCompletionMessage() {
+    var cm = C.completionMessage;
+    ctx.save();
+    ctx.font = cm.font;
+    var tw = ctx.measureText(cm.text).width;
+    var bx = Math.round((C.W - tw) / 2) - cm.padding;
+    var by = cm.centerY - Math.round(cm.boxHeight / 2);
+    var bw = Math.round(tw) + cm.padding * 2;
+    ctx.fillStyle   = cm.colorBox;
+    ctx.fillRect(bx, by, bw, cm.boxHeight);
+    ctx.strokeStyle = cm.colorBorder;
+    ctx.lineWidth   = cm.borderWidth;
+    ctx.strokeRect(bx, by, bw, cm.boxHeight);
+    ctx.fillStyle    = cm.colorText;
+    ctx.shadowColor  = cm.shadowColor;
+    ctx.shadowBlur   = cm.shadowBlur;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cm.text, bx + cm.padding, by + cm.boxHeight / 2);
+    ctx.restore();
+  }
+
   function drawScene() {
     var a = assets;
     var m = STAGE2_MANIFEST;
@@ -583,6 +644,9 @@
 
     // Capa 7 — HUD (última capa, sobre todo)
     drawHUD();
+
+    // Capa 8 — Mensaje de cierre (solo en estado completed)
+    if (_phase === 'completed') drawCompletionMessage();
   }
 
   // ---------------------------------------------------------------------------
@@ -662,6 +726,7 @@
       _score     = 0;
       _alarm     = 0;
       _diffLevel = 0;
+      _phase     = 'playing';
       initTargets();
       createCanvas();
       _rafId = requestAnimationFrame(loop);
@@ -702,6 +767,7 @@
     _score           = 0;
     _alarm           = 0;
     _diffLevel       = 0;
+    _phase           = 'playing';
     _targets         = null;
   }
 
