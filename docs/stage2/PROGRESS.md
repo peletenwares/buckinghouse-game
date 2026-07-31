@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 1 completada — Fase 2 (Escena estática) pendiente.
+Fase 2 completada — Fase 3 (Lanzamiento) pendiente.
 
 ## Completado
 
@@ -75,9 +75,40 @@ Fase 1 completada — Fase 2 (Escena estática) pendiente.
 - Cada frame recortado individualmente; ninguna hoja completa visible como elemento jugable.
 - Etapa 1 no modificada; sin regresiones.
 
+### Fase 2 — Escena estática (2026-07-30) — commit e553a8f
+
+**Archivos creados:**
+- `src/stages/stage2/stage2.js` — módulo IIFE que expone `Stage2.devStart / start / stop`.
+- `stage2-dev.html` — página dev standalone; carga manifest.js + stage2.js y llama `Stage2.devStart()`.
+
+**Archivos modificados:**
+- `src/stages/stage2/manifest.js` — extendido con 11 entradas nuevas: 4 escenas compuestas, 4 relojes individuales, 3 Zzz, 3 resorteras, 3 blancos individuales.
+
+**Assets incorporados:**
+
+| Grupo | Archivos | Dimensiones |
+|---|---|---|
+| Escenas compuestas | `scenes/scene-sleeping.png`, `scene-reacting-1.png`, `scene-reacting-2.png`, `scene-yawning.png` | 1672×941 RGB |
+| Relojes | `projectiles/alarm-clock-red/blue/green/gold.png` | 1024×1024 RGBA |
+| Zzz | `sleep/zzz-small/medium/large.png` | 1024×1024 RGBA |
+| Resortera | `slingshot/slingshot-idle/pulled/release.png` | 1024×1024 RGBA |
+| Blancos | `targets/target-normal/hot/gold.png` | 1536×1024 RGBA |
+
+**Composición de la escena estática:**
+- Capa 1: `sceneSleeping` (1672×941 → escala a 1280×720, sin distorsión perceptible).
+- Capa 2: `slingshotIdle` centrado en la base (centerX=640, bottomY=720, scale=0.30).
+- Capa 3: 3 blancos individuales (`targetNormal`, `targetHot`, `targetGold`) en zona superior.
+- Capa 4: 3 Zzz individuales (`zzzSmall`, `zzzMedium`, `zzzLarge`) flotando sobre los personajes.
+
+**Verificación:**
+- 8/8 assets cargados (200 OK); cero errores 404; cero errores de consola.
+- Sintaxis JS validada con `node new Function()`.
+- Validación visual completada en `http://localhost:5500/stage2-dev.html`.
+- `index.html` y Etapa 1 sin modificaciones; sin regresiones.
+- Working tree limpio tras commit.
+
 ## Pendiente
 
-- Fase 2: Escena estática
 - Fase 3: Lanzamiento
 - Fase 4: Loop jugable
 - Fase 5: Dificultad progresiva
@@ -88,13 +119,14 @@ Fase 1 completada — Fase 2 (Escena estática) pendiente.
 
 - La etapa 2 estará aislada en `src/stages/stage2/stage2.js`.
 - Mínimo contacto con `index.html` (solo Fase 7).
-- Fondo sin personajes.
-- Personajes como sprites independientes sobre el sofá.
 - Lanzador centrado abajo.
 - Estado de Etapa 2 completamente separado del objeto `S` de Etapa 1.
+- **Abandono de sprite sheets problemáticos:** `sleeper-shirtless.png` no tiene padding entre frames (figuras se solapan en x≈268-307); cualquier recorte rectangular produce sangrado o amputación. `zzz.png` (4×3) requería coordenadas manuales difíciles de calibrar sin herramienta de medición exacta.
+- **Estrategia adoptada — escenas compuestas + PNG individuales:** cada estado del juego (durmiendo, reaccionando, bostezando) es una imagen completa 1672×941 con personajes ya integrados. Los proyectiles, Zzz, resorteras y blancos son PNG individuales con canal alfa, eliminando toda lógica de recorte de sprite sheet para estos elementos.
+- Los helpers `getFrameRect`, `drawFrame` y `drawManualFrame` se conservan en `stage2.js` para uso futuro en animación de relojes (`alarm-clocks.png`) y efectos (`game-effects.png`).
 
 ## Problemas conocidos
 
-- `charShirtless` cellW = 307.2 (no entero) y `zzz` cellH = 341.33 (no entero). Funciona en Canvas 2D con float; confirmar visualmente en Fase 2 si hay costuras sub-pixel.
-- `targets` frame 0 es amarillo/dorado — rol exacto vs. "blanco dorado" del SPEC pendiente de aclarar antes de Fase 6.
-- `hud` y `messages` son compuestos, no grilla. Coordenadas exactas de cada elemento TBD en Fase 2.
+- `targets` frame 3 (peligro-rojo con triángulo) de la sprite sheet original no tiene contraparte en los nuevos PNG individuales. Pendiente de aclarar antes de Fase 5.
+- `hud` y `messages` son compuestos, no grilla. Coordenadas exactas de cada elemento TBD en Fase 3 o posterior.
+- `scene-sleeping.png` fue corregida de 1671×941 a 1672×941 (1 px añadido al borde derecho por artefacto de generación). Las otras tres escenas miden 1672×941 correctamente.
