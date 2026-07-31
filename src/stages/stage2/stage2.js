@@ -1,8 +1,7 @@
 (function () {
   'use strict';
 
-  // MF.zzz eliminado — reemplazado por PNG individuales (zzz-small/medium/large).
-  // clocks y effects documentados para fases futuras; no se cargan en escena estática.
+  // Manual frames conservados para fases futuras (animación de relojes, efectos).
   const MF = {
     clocks: [
       { sx:   10, sy: 280, sw: 355, sh: 490 }, // col=0 — rojo
@@ -23,6 +22,7 @@
   const C = {
     W: 1280, H: 720,
     slingshot: { centerX: 640, bottomY: 720, scale: 0.30 },
+    pocket:    { offsetRatioY: 0.30 },
     targets: [
       { asset: 'targetNormal', x: 220,  y: 120, scale: 0.15 },
       { asset: 'targetHot',    x: 600,  y:  95, scale: 0.15 },
@@ -33,19 +33,51 @@
       { asset: 'zzzMedium', x: 600, y:  80, scale: 0.18 },
       { asset: 'zzzLarge',  x: 790, y:  60, scale: 0.18 },
     ],
+    maxDrag:         120,
+    minDrag:         12,
+    minSpeed:        150,
+    maxSpeed:        600,
+    gravity:         300,
+    hitRadius:       90,
+    clockScale:      0.12,
+    rotSpeed:        5.0,
+    releaseDuration: 0.13,
+    dtMax:           0.10,
   };
 
   // sceneSleeping es obligatorio. Las demás entradas fallan con console.warn.
   const SCENE_KEYS = [
     'sceneSleeping',
-    'slingshotIdle',
+    'slingshotIdle', 'slingshotPulled', 'slingshotRelease',
     'targetNormal', 'targetHot', 'targetGold',
     'zzzSmall', 'zzzMedium', 'zzzLarge',
+    'clockRed',
   ];
 
-  let canvas, ctx, assets, _resizeFn;
+  // — Canvas / context —
+  var canvas, ctx, assets, _resizeFn;
 
-  // Conservados para fases futuras (clocks animation, effects).
+  // — RAF —
+  var _rafId    = null;
+  var _lastTime = null;
+
+  // — Estado de la resortera —
+  var _state           = 'idle'; // 'idle' | 'pulling' | 'releasing'
+  var _releaseTimer    = 0;
+  var _pullVX          = 0;
+  var _pullVY          = 0;
+  var _activePointerId = null;
+
+  // — Proyectiles —
+  var _projectiles = []; // { x, y, vx, vy, rotation }
+
+  // — Refs de handlers para cleanup —
+  var _pdownFn, _pmoveFn, _pupFn, _pcancelFn, _plostFn;
+
+  // ---------------------------------------------------------------------------
+  // Helpers de dibujo (conservados para fases futuras)
+  // ---------------------------------------------------------------------------
+
   function getFrameRect(def, col, row) {
     const sx0 = Math.round(col       * def.w / def.cols);
     const sx1 = Math.round((col + 1) * def.w / def.cols);
@@ -73,9 +105,202 @@
     ctx.drawImage(img, 0, 0, def.w, def.h, Math.round(dx), Math.round(dy), dw, dh);
   }
 
-  function draw() {
-    const a = assets;
-    const m = STAGE2_MANIFEST;
+  // ---------------------------------------------------------------------------
+  // Coordenadas
+  // ---------------------------------------------------------------------------
+
+  function toVirtual(clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var sx = rect.width  / C.W;
+    var sy = rect.height / C.H;
+    return { x: (clientX - rect.left) / sx,
+             y: (clientY - rect.top)  / sy };
+  }
+
+  function pocketPos() {
+    var cfg = C.slingshot;
+    var def = STAGE2_MANIFEST.slingshotIdle;
+    var dh  = Math.round(def.h * cfg.scale);
+    return {
+      x: cfg.centerX,
+      y: cfg.bottomY - dh + Math.round(dh * C.pocket.offsetRatioY),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Resortera — helpers de estado
+  // ---------------------------------------------------------------------------
+
+  function cancelDrag() {
+    _state           = 'idle';
+    _releaseTimer    = 0;
+    _activePointerId = null;
+    _pullVX          = 0;
+    _pullVY          = 0;
+  }
+
+  function launch(startX, startY, dx, dy, dist) {
+    var ratio = Math.min(dist, C.maxDrag) / C.maxDrag;
+    var speed = C.minSpeed + ratio * (C.maxSpeed - C.minSpeed);
+    _projectiles.push({
+      x:        startX,
+      y:        startY,
+      vx:       -(dx / dist) * speed,
+      vy:       -(dy / dist) * speed,
+      rotation: 0,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pointer events
+  // ---------------------------------------------------------------------------
+
+  function onPointerDown(e) {
+    if (_state !== 'idle') return;
+    var v  = toVirtual(e.clientX, e.clientY);
+    var pk = pocketPos();
+    var dx = v.x - pk.x;
+    var dy = v.y - pk.y;
+    if (Math.sqrt(dx * dx + dy * dy) > C.hitRadius) return;
+
+    canvas.setPointerCapture(e.pointerId);
+    _activePointerId = e.pointerId;
+    _state = 'pulling';
+
+    var dy2  = Math.max(0, dy);
+    var dist = Math.sqrt(dx * dx + dy2 * dy2);
+    var cap  = Math.min(dist, C.maxDrag);
+    _pullVX  = pk.x + (dist > 0 ? (dx  / dist) * cap : 0);
+    _pullVY  = pk.y + (dist > 0 ? (dy2 / dist) * cap : 0);
+  }
+
+  function onPointerMove(e) {
+    if (_state !== 'pulling' || e.pointerId !== _activePointerId) return;
+    var v  = toVirtual(e.clientX, e.clientY);
+    var pk = pocketPos();
+    var dx = v.x - pk.x;
+    var dy = v.y - pk.y;
+    var dy2  = Math.max(0, dy);
+    var dist = Math.sqrt(dx * dx + dy2 * dy2);
+    var cap  = Math.min(dist, C.maxDrag);
+    _pullVX  = pk.x + (dist > 0 ? (dx  / dist) * cap : 0);
+    _pullVY  = pk.y + (dist > 0 ? (dy2 / dist) * cap : 0);
+  }
+
+  function onPointerUp(e) {
+    if (_state !== 'pulling' || e.pointerId !== _activePointerId) return;
+
+    var pk   = pocketPos();
+    var dx   = _pullVX - pk.x;
+    var dy   = _pullVY - pk.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < C.minDrag) {
+      cancelDrag();
+      return;
+    }
+
+    var startX = _pullVX;
+    var startY = _pullVY;
+
+    launch(startX, startY, dx, dy, dist);
+
+    _state        = 'releasing';
+    _releaseTimer = C.releaseDuration;
+
+    try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    _activePointerId = null;
+    _pullVX          = 0;
+    _pullVY          = 0;
+  }
+
+  function onPointerCancel(e) {
+    if (e.pointerId !== _activePointerId) return;
+    cancelDrag();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Loop
+  // ---------------------------------------------------------------------------
+
+  function loop(timestamp) {
+    _rafId = requestAnimationFrame(loop);
+
+    var dt = 0;
+    if (_lastTime !== null) {
+      dt = Math.min((timestamp - _lastTime) / 1000, C.dtMax);
+    }
+    _lastTime = timestamp;
+
+    if (_state === 'releasing') {
+      _releaseTimer -= dt;
+      if (_releaseTimer <= 0) {
+        _state        = 'idle';
+        _releaseTimer = 0;
+      }
+    }
+
+    _projectiles.forEach(function (p) {
+      p.x        += p.vx * dt;
+      p.y        += p.vy * dt;
+      p.vy       += C.gravity * dt;
+      p.rotation += C.rotSpeed * dt;
+    });
+    _projectiles = _projectiles.filter(function (p) {
+      return p.x > -150 && p.x < C.W + 150 &&
+             p.y > -150 && p.y < C.H + 150;
+    });
+
+    drawScene();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dibujo
+  // ---------------------------------------------------------------------------
+
+  function drawSlingshot() {
+    var key = _state === 'pulling'   ? 'slingshotPulled'  :
+              _state === 'releasing' ? 'slingshotRelease' :
+                                       'slingshotIdle';
+    var entry = assets[key];
+    if (!entry || !entry.ok) entry = assets.slingshotIdle; // fallback
+    if (!entry || !entry.ok) return;
+
+    var cfg = C.slingshot;
+    var def = STAGE2_MANIFEST[key] || STAGE2_MANIFEST.slingshotIdle;
+    var dw  = Math.round(def.w * cfg.scale);
+    var dh  = Math.round(def.h * cfg.scale);
+    ctx.drawImage(entry.img, 0, 0, def.w, def.h,
+      cfg.centerX - Math.round(dw / 2), cfg.bottomY - dh, dw, dh);
+  }
+
+  function drawClock() {
+    var entry = assets.clockRed;
+    if (!entry || !entry.ok) return;
+    var def = STAGE2_MANIFEST.clockRed;
+    var dw  = Math.round(def.w * C.clockScale);
+    var dh  = Math.round(def.h * C.clockScale);
+    ctx.drawImage(entry.img, 0, 0, def.w, def.h,
+      Math.round(_pullVX - dw / 2), Math.round(_pullVY - dh / 2), dw, dh);
+  }
+
+  function drawProjectile(p) {
+    var entry = assets.clockRed;
+    if (!entry || !entry.ok) return;
+    var def = STAGE2_MANIFEST.clockRed;
+    var dw  = Math.round(def.w * C.clockScale);
+    var dh  = Math.round(def.h * C.clockScale);
+    ctx.save();
+    ctx.translate(Math.round(p.x), Math.round(p.y));
+    ctx.rotate(p.rotation);
+    ctx.drawImage(entry.img, 0, 0, def.w, def.h,
+      -Math.round(dw / 2), -Math.round(dh / 2), dw, dh);
+    ctx.restore();
+  }
+
+  function drawScene() {
+    var a = assets;
+    var m = STAGE2_MANIFEST;
 
     ctx.clearRect(0, 0, C.W, C.H);
 
@@ -86,32 +311,31 @@
         0, 0, C.W, C.H);
     }
 
-    // Capa 2 — Resortera en reposo, centrada en la base
-    if (a.slingshotIdle && a.slingshotIdle.ok) {
-      const cfg = C.slingshot;
-      const def = m.slingshotIdle;
-      const dw = Math.round(def.w * cfg.scale);
-      const dh = Math.round(def.h * cfg.scale);
-      ctx.drawImage(a.slingshotIdle.img, 0, 0, def.w, def.h,
-        cfg.centerX - Math.round(dw / 2), cfg.bottomY - dh, dw, dh);
-    }
-
-    // Capa 3 — Blancos individuales
+    // Capa 2 — Blancos
     C.targets.forEach(function (t) {
-      const asset = a[t.asset];
-      if (asset && asset.ok) {
-        drawFull(asset.img, m[t.asset], t.x, t.y, t.scale);
-      }
+      var asset = a[t.asset];
+      if (asset && asset.ok) drawFull(asset.img, m[t.asset], t.x, t.y, t.scale);
     });
 
-    // Capa 4 — Zzz individuales
+    // Capa 3 — Zzz
     C.zzz.forEach(function (z) {
-      const asset = a[z.asset];
-      if (asset && asset.ok) {
-        drawFull(asset.img, m[z.asset], z.x, z.y, z.scale);
-      }
+      var asset = a[z.asset];
+      if (asset && asset.ok) drawFull(asset.img, m[z.asset], z.x, z.y, z.scale);
     });
+
+    // Capa 4 — Resortera (estado actual)
+    drawSlingshot();
+
+    // Capa 5 — Reloj en el pouch durante el arrastre
+    if (_state === 'pulling') drawClock();
+
+    // Capa 6 — Proyectiles en vuelo
+    _projectiles.forEach(drawProjectile);
   }
+
+  // ---------------------------------------------------------------------------
+  // Canvas
+  // ---------------------------------------------------------------------------
 
   function resizeS2() {
     var s = Math.min(window.innerWidth / C.W, window.innerHeight / C.H);
@@ -123,13 +347,37 @@
     canvas.id = 's2canvas';
     canvas.width  = C.W;
     canvas.height = C.H;
-    canvas.style.cssText = 'position:fixed;left:50%;top:50%;display:block;transform-origin:center center;';
+    canvas.style.cssText = [
+      'position:fixed',
+      'left:50%',
+      'top:50%',
+      'display:block',
+      'transform-origin:center center',
+      'touch-action:none',
+      'cursor:crosshair',
+    ].join(';');
     document.body.appendChild(canvas);
     ctx = canvas.getContext('2d');
+
     _resizeFn = resizeS2;
     window.addEventListener('resize', _resizeFn);
     resizeS2();
+
+    _pdownFn   = onPointerDown;
+    _pmoveFn   = onPointerMove;
+    _pupFn     = onPointerUp;
+    _pcancelFn = onPointerCancel;
+    _plostFn   = onPointerCancel; // lostpointercapture cancela igual que pointercancel
+    canvas.addEventListener('pointerdown',        _pdownFn);
+    canvas.addEventListener('pointermove',        _pmoveFn);
+    canvas.addEventListener('pointerup',          _pupFn);
+    canvas.addEventListener('pointercancel',      _pcancelFn);
+    canvas.addEventListener('lostpointercapture', _plostFn);
   }
+
+  // ---------------------------------------------------------------------------
+  // Carga de assets
+  // ---------------------------------------------------------------------------
 
   function loadSceneAssets() {
     var results = {};
@@ -152,11 +400,15 @@
     })).then(function () { return results; });
   }
 
+  // ---------------------------------------------------------------------------
+  // API pública
+  // ---------------------------------------------------------------------------
+
   function devStart() {
     return loadSceneAssets().then(function (loaded) {
       assets = loaded;
       createCanvas();
-      draw();
+      _rafId = requestAnimationFrame(loop);
     });
   }
 
@@ -165,10 +417,32 @@
   }
 
   function stop() {
-    if (_resizeFn) window.removeEventListener('resize', _resizeFn);
-    if (canvas)    { canvas.remove(); canvas = null; }
-    ctx    = null;
-    assets = null;
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+
+    if (canvas) {
+      canvas.removeEventListener('pointerdown',        _pdownFn);
+      canvas.removeEventListener('pointermove',        _pmoveFn);
+      canvas.removeEventListener('pointerup',          _pupFn);
+      canvas.removeEventListener('pointercancel',      _pcancelFn);
+      canvas.removeEventListener('lostpointercapture', _plostFn);
+      if (_activePointerId !== null) {
+        try { canvas.releasePointerCapture(_activePointerId); } catch (err) {}
+      }
+      canvas.remove();
+      canvas = null;
+    }
+
+    if (_resizeFn) { window.removeEventListener('resize', _resizeFn); _resizeFn = null; }
+
+    ctx              = null;
+    assets           = null;
+    _projectiles     = [];
+    _state           = 'idle';
+    _activePointerId = null;
+    _pullVX          = 0;
+    _pullVY          = 0;
+    _releaseTimer    = 0;
+    _lastTime        = null;
   }
 
   window.Stage2 = { devStart: devStart, start: start, stop: stop };

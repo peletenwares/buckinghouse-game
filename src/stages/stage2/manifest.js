@@ -21,6 +21,9 @@ const STAGE2_MANIFEST = {
   zzzSmall:       { src: 'assets/stage2/sleep/zzz-small.png',          w: 1024, h: 1024 },
   zzzMedium:      { src: 'assets/stage2/sleep/zzz-medium.png',         w: 1024, h: 1024 },
   zzzLarge:       { src: 'assets/stage2/sleep/zzz-large.png',          w: 1024, h: 1024 },
+  slingshotPulled:  { src: 'assets/stage2/slingshot/slingshot-pulled.png',  w: 1024, h: 1024 },
+  slingshotRelease: { src: 'assets/stage2/slingshot/slingshot-release.png', w: 1024, h: 1024 },
+  clockRed:         { src: 'assets/stage2/projectiles/alarm-clock-red.png', w: 1024, h: 1024 },
 };
 
 function loadStage2Assets() {
