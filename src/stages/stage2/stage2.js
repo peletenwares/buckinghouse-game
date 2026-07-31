@@ -129,6 +129,11 @@
   var _rafId    = null;
   var _lastTime = null;
 
+  // — Control de arranque —
+  var _started      = false; // true mientras Stage2 está activo o cargando
+  var _startPromise = null;  // promesa en curso de start(); reutilizada si se llama dos veces
+  var _runToken     = 0;     // token monotónico; stop() lo incrementa para invalidar cargas pendientes
+
   // — Estado de la resortera —
   var _state           = 'idle'; // 'idle' | 'pulling' | 'releasing'
   var _releaseTimer    = 0;
@@ -668,6 +673,7 @@
       'left:50%',
       'top:50%',
       'display:block',
+      'z-index:10',
       'transform-origin:center center',
       'touch-action:none',
       'cursor:crosshair',
@@ -734,10 +740,44 @@
   }
 
   function start() {
-    // stub — integración Etapa 1 en Fase 7
+    if (_startPromise) return _startPromise; // carga en curso: reutilizar promesa
+    if (_started)      return Promise.resolve(); // ya activo y resuelto: no-op
+
+    _started = true;
+    _runToken++;
+    var token = _runToken;
+
+    _startPromise = loadSceneAssets().then(function (loaded) {
+      if (!_started || token !== _runToken) {
+        var e = new Error('Stage2 start cancelled');
+        e.code = 'STAGE2_START_CANCELLED';
+        return Promise.reject(e);
+      }
+      assets     = loaded;
+      _score     = 0;
+      _alarm     = 0;
+      _diffLevel = 0;
+      _phase     = 'playing';
+      initTargets();
+      createCanvas();
+      _rafId = requestAnimationFrame(loop);
+    }).catch(function (err) {
+      _startPromise = null;
+      if (err && err.code === 'STAGE2_START_CANCELLED') {
+        return Promise.reject(err);
+      }
+      console.error('[Stage2] error cargando assets:', err);
+      _started = false;
+      return Promise.reject(err);
+    });
+
+    return _startPromise;
   }
 
   function stop() {
+    _runToken++;       // invalida cualquier .then() pendiente de start()
+    _startPromise = null;
+
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
 
     if (canvas) {
@@ -769,6 +809,7 @@
     _diffLevel       = 0;
     _phase           = 'playing';
     _targets         = null;
+    _started         = false;
   }
 
   window.Stage2 = { devStart: devStart, start: start, stop: stop };
