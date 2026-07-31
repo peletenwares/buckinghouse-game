@@ -312,6 +312,9 @@ const PHRASES = ["¡Besito a la mamá!","¿Dónde está mi amor?","¿Quién vien
    ESTADO
    ========================================================================== */
 let S = null, running = false, raf = null;
+let _s2TransitionTimer   = null;  // setTimeout handle de la transición a Etapa 2
+let _stage2Active        = false; // true cuando Etapa 2 está corriendo
+let _stage2Transitioning = false; // true mientras Stage2.start() está en curso
 
 function reset(){
   S = {
@@ -1564,6 +1567,13 @@ const scStart=document.getElementById('startScreen'), scOver=document.getElement
 let startPending = false;
 async function start(){
   if(startPending) return;
+  clearTimeout(_s2TransitionTimer); _s2TransitionTimer = null;
+  if(_stage2Transitioning || _stage2Active){
+    if(window.Stage2 && typeof Stage2.stop === 'function') Stage2.stop();
+    _stage2Transitioning = false;
+    _stage2Active        = false;
+  }
+  cv.style.display = '';
   startPending = true;
   await Promise.all([nataliaReady, catsReady, alexisReady]);
   startPending = false;
@@ -1583,6 +1593,31 @@ function win(){
     "Sultán, Pipi, Mía, Chichi, Vito, Luna y Blanqui están adentro. Alimento juntado: " +
     S.food + " · Corazones restantes: " + S.nat.hearts;
   scWin.style.display="flex";
+  _s2TransitionTimer = setTimeout(launchStage2, 3000);
+}
+function launchStage2(){
+  if(!window.Stage2 || typeof Stage2.start !== 'function'){
+    console.error('[Stage2] módulo no disponible — transición cancelada');
+    return;
+  }
+  if(S.phase !== 'win' || _stage2Active || _stage2Transitioning) return;
+  _s2TransitionTimer   = null;
+  _stage2Transitioning = true;
+  Stage2.start().then(function(){
+    if(S.phase !== 'win'){
+      _stage2Transitioning = false;
+      return;
+    }
+    _stage2Transitioning = false;
+    _stage2Active        = true;
+    scWin.style.display  = 'none';
+    cv.style.display     = 'none';
+  }).catch(function(err){
+    _stage2Transitioning = false;
+    if(!err || err.code !== 'STAGE2_START_CANCELLED'){
+      console.error('[Stage2] fallo al iniciar — pantalla de victoria conservada:', err);
+    }
+  });
 }
 const rot = document.getElementById('rotate');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -1624,5 +1659,7 @@ window.visualViewport?.addEventListener('resize', resizeCanvas);
 /* primer render para que se vea el patio detrás del menú */
 reset(); resizeCanvas(); draw();
 </script>
+<script src="src/stages/stage2/manifest.js"></script>
+<script src="src/stages/stage2/stage2.js"></script>
 </body>
 </html>
