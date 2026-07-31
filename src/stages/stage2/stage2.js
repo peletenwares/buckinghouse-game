@@ -26,10 +26,19 @@
 
     // collisionOffsetX/Y: offset provisional desde (t.x, t.y) al centro visible.
     // Calculado como (1536 * 0.15 / 2) y (1024 * 0.15 / 2). Calibrar en test visual.
+    // bounds: carril de movimiento por blanco (esquina superior-izquierda del sprite).
+    // Ancho renderizado = round(1536 * 0.15) = 230 px.
+    // left.xMax+230=560 < center.xMin=570; center.xMax+230=880 < right.xMin=890.
     targets: [
-      { asset: 'targetNormal', x: 220,  y: 120, scale: 0.15, collisionOffsetX: 115, collisionOffsetY: 77 },
-      { asset: 'targetNormal', x: 600,  y:  95, scale: 0.15, collisionOffsetX: 115, collisionOffsetY: 77 },
-      { asset: 'targetGold',   x: 1000, y: 130, scale: 0.15, collisionOffsetX: 115, collisionOffsetY: 77 },
+      { asset: 'targetNormal', x: 220,  y:  65, scale: 0.15,
+        collisionOffsetX: 115, collisionOffsetY: 77,
+        bounds: { xMin: 220, xMax: 330, yMin:  45, yMax:  85 } },
+      { asset: 'targetNormal', x: 600,  y:  50, scale: 0.15,
+        collisionOffsetX: 115, collisionOffsetY: 77,
+        bounds: { xMin: 570, xMax: 650, yMin:  35, yMax:  70 } },
+      { asset: 'targetGold',   x: 1000, y:  50, scale: 0.15,
+        collisionOffsetX: 115, collisionOffsetY: 77,
+        bounds: { xMin: 890, xMax: 1020, yMin: 35, yMax:  70 } },
     ],
     zzz: [
       { asset: 'zzzSmall',  x: 400, y: 130, scale: 0.18 },
@@ -57,6 +66,15 @@
     scorePerHit:  100,
     alarmPerHit:   10,
 
+    // Velocidades de movimiento por nivel de dificultad (px/s).
+    // Nivel 0: estático. Niveles 1-3 activos a partir de 40/65/85% de alarma.
+    movement: [
+      null,
+      { speedMin:  30, speedMax:  50 },
+      { speedMin:  70, speedMax: 110 },
+      { speedMin: 130, speedMax: 170 },
+    ],
+
     hud: {
       font:           'bold 26px monospace',
       colorText:      '#fff',
@@ -77,14 +95,18 @@
     },
   };
 
-  // sceneSleeping es obligatorio. Las demás entradas fallan con console.warn.
+  // Escenas obligatorias para Fase 5. Fallos se reportan con console.error.
   const SCENE_KEYS = [
     'sceneSleeping',
+    'sceneReacting1', 'sceneReacting2', 'sceneYawning',
     'slingshotIdle', 'slingshotPulled', 'slingshotRelease',
     'targetNormal', 'targetHot', 'targetGold',
     'zzzSmall', 'zzzMedium', 'zzzLarge',
     'clockRed',
   ];
+
+  // Claves de escenas que deben tratarse como obligatorias (error, no warn).
+  const REQUIRED_SCENE_KEYS = ['sceneSleeping', 'sceneReacting1', 'sceneReacting2', 'sceneYawning'];
 
   // — Canvas / context —
   var canvas, ctx, assets, _resizeFn;
@@ -104,9 +126,10 @@
   var _projectiles = []; // { prevX, prevY, x, y, vx, vy, rotation, consumed }
 
   // — Estado jugable —
-  var _score   = 0;
-  var _alarm   = 0;   // 0–100
-  var _targets = null; // inicializado en initTargets()
+  var _score     = 0;
+  var _alarm     = 0;   // 0–100
+  var _targets   = null; // inicializado en initTargets()
+  var _diffLevel = 0;    // 0|1|2|3 — nivel de dificultad activo
 
   // — Refs de handlers para cleanup —
   var _pdownFn, _pmoveFn, _pupFn, _pcancelFn, _plostFn;
@@ -183,6 +206,31 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Dificultad progresiva — helpers
+  // ---------------------------------------------------------------------------
+
+  function getSceneKey(alarm) {
+    if (alarm >= 85) return 'sceneYawning';
+    if (alarm >= 65) return 'sceneReacting2';
+    if (alarm >= 40) return 'sceneReacting1';
+    return 'sceneSleeping';
+  }
+
+  function getZzzCount(alarm) {
+    if (alarm >= 85) return 0;
+    if (alarm >= 65) return 1;
+    if (alarm >= 40) return 2;
+    return 3;
+  }
+
+  function getDifficultyLevel(alarm) {
+    if (alarm >= 85) return 3;
+    if (alarm >= 65) return 2;
+    if (alarm >= 40) return 1;
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
   // Targets — inicialización
   // ---------------------------------------------------------------------------
 
@@ -197,7 +245,53 @@
         collisionOffsetY: cfg.collisionOffsetY,
         hot:              false,
         hotTimer:         0,
+        vx:               0,
+        vy:               0,
+        bounds:           cfg.bounds,
       };
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Targets — movimiento y velocidades
+  // ---------------------------------------------------------------------------
+
+  // Signos iniciales distintos por target: evitan movimiento sincronizado.
+  var _initSignX = [ 1, -1,  1];
+  var _initSignY = [ 1,  1, -1];
+
+  function assignTargetVelocities(level) {
+    if (level === 0) {
+      _targets.forEach(function (t) { t.vx = 0; t.vy = 0; });
+      return;
+    }
+    var cfg = C.movement[level];
+    _targets.forEach(function (t, i) {
+      var speed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
+      var currentSpeed = Math.sqrt(t.vx * t.vx + t.vy * t.vy);
+      if (currentSpeed > 0) {
+        // Escalar magnitud preservando dirección exacta.
+        t.vx = (t.vx / currentSpeed) * speed;
+        t.vy = (t.vy / currentSpeed) * speed;
+      } else {
+        // Primera asignación: ángulo entre 25°–65° garantiza diagonal; magnitud exacta = speed.
+        var theta = (25 + Math.random() * 40) * Math.PI / 180;
+        t.vx = _initSignX[i] * Math.cos(theta) * speed;
+        t.vy = _initSignY[i] * Math.sin(theta) * speed;
+      }
+    });
+  }
+
+  function updateTargets(dt) {
+    _targets.forEach(function (t) {
+      if (t.vx === 0 && t.vy === 0) return;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      var b = t.bounds;
+      if (t.x < b.xMin) { t.x = b.xMin; t.vx =  Math.abs(t.vx); }
+      if (t.x > b.xMax) { t.x = b.xMax; t.vx = -Math.abs(t.vx); }
+      if (t.y < b.yMin) { t.y = b.yMin; t.vy =  Math.abs(t.vy); }
+      if (t.y > b.yMax) { t.y = b.yMax; t.vy = -Math.abs(t.vy); }
     });
   }
 
@@ -327,7 +421,17 @@
       }
     });
 
-    // 2 — Física: guardar posición anterior, luego avanzar
+    // 2 — Dificultad progresiva: nivel sube con la alarma, nunca baja
+    var newLevel = getDifficultyLevel(_alarm);
+    if (newLevel > _diffLevel) {
+      _diffLevel = newLevel;
+      assignTargetVelocities(_diffLevel);
+    }
+
+    // 3 — Mover blancos (rebote en t.bounds)
+    updateTargets(dt);
+
+    // 4 — Física: guardar posición anterior, luego avanzar
     _projectiles.forEach(function (p) {
       p.prevX     = p.x;
       p.prevY     = p.y;
@@ -337,7 +441,7 @@
       p.rotation += C.rotSpeed * dt;
     });
 
-    // 3 — Detección de colisión continua
+    // 5 — Detección de colisión continua
     var combined = C.targetHitRadius + C.projectileHitRadius;
     _projectiles.forEach(function (p) {
       if (p.consumed) return;
@@ -358,7 +462,7 @@
       });
     });
 
-    // 4 — Eliminar proyectiles consumidos o fuera de canvas
+    // 6 — Eliminar proyectiles consumidos o fuera de canvas
     _projectiles = _projectiles.filter(function (p) {
       return !p.consumed
           && p.x > -150 && p.x < C.W + 150
@@ -438,10 +542,12 @@
 
     ctx.clearRect(0, 0, C.W, C.H);
 
-    // Capa 1 — Escena compuesta (fondo + personajes dormidos)
-    if (a.sceneSleeping && a.sceneSleeping.ok) {
-      ctx.drawImage(a.sceneSleeping.img,
-        0, 0, m.sceneSleeping.w, m.sceneSleeping.h,
+    // Capa 1 — Escena compuesta según progreso de alarma
+    var sceneKey = getSceneKey(_alarm);
+    if (!(a[sceneKey] && a[sceneKey].ok)) sceneKey = 'sceneSleeping';
+    if (a[sceneKey] && a[sceneKey].ok) {
+      ctx.drawImage(a[sceneKey].img,
+        0, 0, m[sceneKey].w, m[sceneKey].h,
         0, 0, C.W, C.H);
     }
 
@@ -459,8 +565,9 @@
       });
     }
 
-    // Capa 3 — Zzz
-    C.zzz.forEach(function (z) {
+    // Capa 3 — Zzz (cantidad según progreso de alarma)
+    var zzzCount = getZzzCount(_alarm);
+    C.zzz.slice(0, zzzCount).forEach(function (z) {
       var asset = a[z.asset];
       if (asset && asset.ok) drawFull(asset.img, m[z.asset], z.x, z.y, z.scale);
     });
@@ -533,8 +640,8 @@
         img.onload  = function () { results[key] = { img: img, ok: true }; resolve(); };
         img.onerror = function () {
           results[key] = { img: null, ok: false };
-          if (key === 'sceneSleeping') {
-            console.error('[Stage2] ERROR: escena base obligatoria no cargó:', src);
+          if (REQUIRED_SCENE_KEYS.indexOf(key) !== -1) {
+            console.error('[Stage2] ERROR: escena obligatoria no cargó:', src);
           } else {
             console.warn('[Stage2] Asset no cargó:', src);
           }
@@ -551,9 +658,10 @@
 
   function devStart() {
     return loadSceneAssets().then(function (loaded) {
-      assets = loaded;
-      _score = 0;
-      _alarm = 0;
+      assets     = loaded;
+      _score     = 0;
+      _alarm     = 0;
+      _diffLevel = 0;
       initTargets();
       createCanvas();
       _rafId = requestAnimationFrame(loop);
@@ -593,6 +701,7 @@
     _lastTime        = null;
     _score           = 0;
     _alarm           = 0;
+    _diffLevel       = 0;
     _targets         = null;
   }
 
