@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 3 completada — Fase 4 (Loop jugable) pendiente.
+Fase 4 completada — Fase 5 (Dificultad progresiva) pendiente.
 
 ## Completado
 
@@ -135,9 +135,31 @@ Fase 3 completada — Fase 4 (Loop jugable) pendiente.
 - `index.html` y Etapa 1 sin modificaciones; sin regresiones.
 - Working tree limpio tras commit.
 
+### Fase 4 — Loop jugable (2026-07-30) — commit 7e057b9
+
+**Archivos modificados:**
+- `src/stages/stage2/stage2.js` — colisiones continuas, puntaje, alarma, HUD funcional.
+
+**Mecánica implementada:**
+- Detección de colisión continua (segmento–punto): cada proyectil guarda `prevX/prevY` y la posición actual; se calcula la distancia mínima entre el centro del blanco y el segmento de trayectoria. Evita que relojes rápidos atraviesen blancos entre frames.
+- Radio combinado: `targetHitRadius (60 px) + projectileHitRadius (25 px)` — valores provisionales que reflejan el contenido visible, no el PNG completo 1536×1024 con espacio transparente.
+- Prevención de impactos duplicados: flag `consumed` en el proyectil. En el mismo frame, un proyectil no puede impactar dos blancos ni ser contado dos veces. Un blanco ya en estado hot absorbe el proyectil en silencio sin sumar puntaje.
+- Puntaje: **100 puntos por impacto** *(provisional Fase 4 — SPEC.md no define valores numéricos)*.
+- Progreso de alarma: **+10% por impacto** *(provisional Fase 4)*; 10 impactos válidos llenan la barra al 100%.
+- Cooldown hot: 1.5 segundos. Al expirar el blanco regresa a su `restAsset` (`targetNormal` o `targetGold`).
+- El blanco dorado (`targetGold`) muestra `targetHot` durante el cooldown y **regresa a `targetGold`** al enfriarse — `restAsset` se conserva sin alterar.
+- Alarma limitada a 100 % con `Math.min`. No existe victoria ni efecto adicional al llegar al 100 % en esta fase.
+- Offsets de colisión (`collisionOffsetX: 115, collisionOffsetY: 77`) definidos por blanco en `C.targets` como valores provisionales; pendiente calibración visual.
+- HUD funcional con Canvas 2D: texto de score, porcentaje de alarma y barra de progreso. Todas las posiciones, colores y tipografías centralizadas en `C.hud` — sin números mágicos en `drawHUD()`.
+
+**Verificación:**
+- Sintaxis JS validada con `node new Function()`.
+- Validación visual completada en `http://localhost:5500/stage2-dev.html`.
+- `index.html` y Etapa 1 sin modificaciones; sin regresiones.
+- Working tree limpio tras commit.
+
 ## Pendiente
 
-- Fase 4: Loop jugable
 - Fase 5: Dificultad progresiva
 - Fase 6: Final dorado
 - Fase 7: Integración con Etapa 1
