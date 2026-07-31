@@ -10,6 +10,17 @@ const STAGE2_MANIFEST = {
   effects:       { src: 'assets/stage2/fx/game-effects.png',               w: 1536, h: 1024, cols: 3, rows: 2, cellW: 512,   cellH: 512 },
   hud:           { src: 'assets/stage2/ui/hud.png',                        w: 1536, h: 1024 },
   messages:      { src: 'assets/stage2/ui/result-messages.png',            w: 1536, h: 1024 },
+  sceneSleeping:  { src: 'assets/stage2/scenes/scene-sleeping.png',   w: 1672, h: 941 },
+  sceneReacting1: { src: 'assets/stage2/scenes/scene-reacting-1.png', w: 1672, h: 941 },
+  sceneReacting2: { src: 'assets/stage2/scenes/scene-reacting-2.png', w: 1672, h: 941 },
+  sceneYawning:   { src: 'assets/stage2/scenes/scene-yawning.png',    w: 1672, h: 941 },
+  slingshotIdle:  { src: 'assets/stage2/slingshot/slingshot-idle.png', w: 1024, h: 1024 },
+  targetNormal:   { src: 'assets/stage2/targets/target-normal.png',    w: 1536, h: 1024 },
+  targetHot:      { src: 'assets/stage2/targets/target-hot.png',       w: 1536, h: 1024 },
+  targetGold:     { src: 'assets/stage2/targets/target-gold.png',      w: 1536, h: 1024 },
+  zzzSmall:       { src: 'assets/stage2/sleep/zzz-small.png',          w: 1024, h: 1024 },
+  zzzMedium:      { src: 'assets/stage2/sleep/zzz-medium.png',         w: 1024, h: 1024 },
+  zzzLarge:       { src: 'assets/stage2/sleep/zzz-large.png',          w: 1024, h: 1024 },
 };
 
 function loadStage2Assets() {
