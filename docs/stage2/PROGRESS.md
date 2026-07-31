@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 6 completada — Fase 7 (Integración con Etapa 1) pendiente.
+Fase 7 completada — Integración con Etapa 1 implementada. Pendiente: validación visual.
 
 ## Completado
 
@@ -271,9 +271,44 @@ Fase 6 completada — Fase 7 (Integración con Etapa 1) pendiente.
 - `index.html`, `manifest.js`, `stage2-dev.html` y Etapa 1 sin modificaciones; sin regresiones.
 - Working tree limpio tras commit.
 
+### Fase 7 — Integración con Etapa 1 (2026-07-31)
+
+**Archivos modificados:**
+- `src/stages/stage2/stage2.js` — `Stage2.start()` implementado con token monotónico; `stop()` actualizado; `z-index:10` en canvas.
+- `index.html` — variables de estado, `win()` con auto-transición de 3 s, `launchStage2()`, `start()` con limpieza de Etapa 2, `<script>` tags para `manifest.js` y `stage2.js`.
+
+**Mecánica implementada:**
+
+**Transición automática Etapa 1 → Etapa 2:**
+- Al ganar la Etapa 1, `win()` programa `launchStage2()` con un `setTimeout` de 3 s.
+- `#winScreen` permanece visible 3 s; el jugador puede leer el resultado.
+- `launchStage2()` verifica: módulo disponible, `S.phase === 'win'`, `!_stage2Active`, `!_stage2Transitioning`.
+- Establece `_stage2Transitioning = true` y llama `Stage2.start()`.
+- Solo oculta `#winScreen` y `#game` dentro del `.then()` de la promesa, una vez confirmado el arranque.
+- En `.catch()`: limpia `_stage2Transitioning`, conserva winScreen visible.
+
+**Protección de carga asíncrona (token monotónico):**
+- Variables en `stage2.js`: `_started`, `_startPromise`, `_runToken`.
+- `_runToken` se incrementa en cada `start()` y en `stop()`.
+- El `.then()` de `loadSceneAssets()` comprueba `!_started || token !== _runToken` antes de crear canvas, RAF o listeners.
+- Si falla la comprobación: rechaza con `err.code = 'STAGE2_START_CANCELLED'` (nunca se convierte en éxito).
+- La secuencia `start A → stop → start B → resuelve A` es segura: A ve token inválido y rechaza.
+- `_startPromise`: si `start()` se llama dos veces concurrentemente, la segunda recibe la misma promesa en curso.
+
+**Reinicio global (`start()` en `index.html`):**
+- Cancela y limpia `_s2TransitionTimer`.
+- Si `_stage2Transitioning || _stage2Active`: llama `Stage2.stop()` (invalida token, cancela RAF, elimina listeners y canvas), luego resetea ambas banderas.
+- Restaura `cv.style.display = ''`.
+- Funciona correctamente en cualquier estado: durante transición, con Etapa 2 activa, o con Etapa 2 completada.
+
+**Verificación:**
+- Sintaxis JS validada con `node --check` en `stage2.js`.
+- `stage2-dev.html` no fue modificado; sigue funcionando standalone.
+- Validación visual pendiente en `http://localhost:5500/`.
+
 ## Pendiente
 
-- Fase 7: Integración con Etapa 1
+- Ninguna fase pendiente. Etapa 2 completamente integrada.
 
 ## Decisiones
 
