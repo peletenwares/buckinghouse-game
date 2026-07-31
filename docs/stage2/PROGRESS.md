@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 2 completada — Fase 3 (Lanzamiento) pendiente.
+Fase 3 completada — Fase 4 (Loop jugable) pendiente.
 
 ## Completado
 
@@ -107,9 +107,36 @@ Fase 2 completada — Fase 3 (Lanzamiento) pendiente.
 - `index.html` y Etapa 1 sin modificaciones; sin regresiones.
 - Working tree limpio tras commit.
 
+### Fase 3 — Apuntado y Lanzamiento (2026-07-30) — commit 9f48e94
+
+**Archivos modificados:**
+- `src/stages/stage2/manifest.js` — añadidas 3 entradas: `slingshotPulled`, `slingshotRelease`, `clockRed`.
+- `src/stages/stage2/stage2.js` — reescritura completa: RAF loop con delta time, estado de resortera, pointer events, física de proyectiles.
+
+**Mecánica implementada:**
+- Apuntado mediante Pointer Events API (mouse y touch unificados).
+- Resortera muestra `slingshotIdle`, `slingshotPulled` o `slingshotRelease` según estado.
+- Reloj rojo (`clockRed`) visible en la posición del pouch durante el arrastre.
+- Restricción: el pouch solo puede moverse hacia abajo o lateralmente, nunca por encima de su posición de reposo.
+- `minDrag = 12 px` virtuales: clics sin arrastre suficiente cancelan sin lanzar.
+- Al soltar: proyectil creado en la posición visual exacta del pouch, sin salto.
+- Dirección opuesta al arrastre; potencia proporcional a la distancia clampeada (150–600 px/s).
+- Física con delta time: velocidades en px/s, gravedad 300 px/s², rotación 5 rad/s.
+- Cap de dt a 100 ms para evitar saltos tras cambio de pestaña.
+- Múltiples proyectiles pueden coexistir simultáneamente.
+- Proyectiles eliminados automáticamente al salir completamente del canvas.
+- Solo el puntero activo (por `pointerId`) puede mover o soltar la resortera.
+- `pointercancel` y `lostpointercapture` cancelan el arrastre limpiamente sin lanzar.
+- `stop()` cancela RAF, remueve todos los listeners, libera pointer capture si aplica, vacía proyectiles y reinicia estado.
+
+**Verificación:**
+- Sintaxis JS validada con `node new Function()`.
+- Validación visual completada en `http://localhost:5500/stage2-dev.html`.
+- `index.html` y Etapa 1 sin modificaciones; sin regresiones.
+- Working tree limpio tras commit.
+
 ## Pendiente
 
-- Fase 3: Lanzamiento
 - Fase 4: Loop jugable
 - Fase 5: Dificultad progresiva
 - Fase 6: Final dorado
