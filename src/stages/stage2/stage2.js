@@ -129,10 +129,11 @@ function drawWinScreen(ctx, gs) {
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   var mm = Math.floor(gs.timer / 60);
   var ss = Math.floor(gs.timer % 60).toString().padStart(2, '0');
-  ctx.fillText('Tiempo restante: ' + mm + ':' + ss, S2C.W / 2, 310);
-  ctx.fillText('Saldo Bip recogido: ' + gs.bipCount, S2C.W / 2, 342);
-  ctx.fillText('Golpes recibidos: '   + gs.hits,     S2C.W / 2, 374);
-  ctx.fillText('Caídas: '             + gs.falls,    S2C.W / 2, 406);
+  ctx.fillText('Tiempo restante: ' + mm + ':' + ss, S2C.W / 2, 306);
+  ctx.fillText('Puntaje: '           + (gs.score || 0), S2C.W / 2, 336);
+  ctx.fillText('Saldo Bip recogido: ' + gs.bipCount, S2C.W / 2, 366);
+  ctx.fillText('Golpes recibidos: '   + gs.hits,     S2C.W / 2, 396);
+  ctx.fillText('Caídas: '             + gs.falls,    S2C.W / 2, 426);
   if (gs.caughtFirstBus) {
     ctx.fillStyle = '#6bff9e';
     ctx.fillText('Alcanzaste la primera micro', S2C.W / 2, 440);
@@ -259,7 +260,7 @@ function drawDebugOverlay(ctx, gs) {
 
   // Debug teclas
   if (S2Input.pressed('dbgNext'))     { if (_sm) _sm.transitionTo(nextSceneKey(_sm.key)); }
-  if (S2Input.pressed('dbgTimeUp'))   { if (_gs) _gs.timer += 15; }
+  if (S2Input.pressed('dbgTimeUp'))   { if (_gs) _gs.timer = Math.min(S2C.timer.max, _gs.timer + 15); }
   if (S2Input.pressed('dbgTimeDown')) { if (_gs) _gs.timer = Math.max(0, _gs.timer - 15); }
   if (S2Input.pressed('dbgInvul') && _sm && _sm.scene && _sm.scene.getPlayer) {
     _sm.scene.getPlayer().invulTimer = 30;
@@ -293,6 +294,8 @@ function loop(timestamp) {
   var timerRunning = scKey !== 'COMPLETE' && scKey !== 'FAILED' && scKey !== 'INTRO';
   if (timerRunning && _gs) {
     _gs.timer -= dt;
+    // Techo duro: el cronómetro jamás supera el presupuesto total.
+    if (_gs.timer > S2C.timer.max) _gs.timer = S2C.timer.max;
     if (_gs.timer <= 0) { _gs.timer = 0; _sm.transitionTo('FAILED'); }
   }
 
@@ -324,6 +327,7 @@ function loop(timestamp) {
 function freshGameState() {
   var gs = {
     timer:           S2C.timer.start,
+    score:           0,
     bipCount:        0,
     bipBonus:        0,
     falls:           0,

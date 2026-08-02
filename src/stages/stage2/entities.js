@@ -98,7 +98,9 @@ function makeMovingPlatform(x, yMin, yMax, w, speed, assetKey, assets) {
     active: true,
     yMin: yMin, yMax: yMax,
     vx: 0, vy: speed,
+    _y0: yMin, _vy0: speed,   // estado inicial (para reiniciar el cruce)
     assetKey: assetKey,
+    reset: function() { this.y = this._y0; this.vy = this._vy0; },
     update: function(dt) {
       this.y += this.vy * dt;
       if (this.y >= this.yMax) { this.y = this.yMax; this.vy = -Math.abs(this.vy); }
@@ -374,13 +376,15 @@ function makeItem(x, y, type, assets) {
           gs.bipCount++;
           showMsg('Saldo Bip ' + gs.bipCount + '/' + CC.required, '#ffd166');
         } else {
+          // Bip extra: puntuación, SIN efecto en el cronómetro.
           gs.bipBonus = (gs.bipBonus || 0) + 1;
-          gs.timer += CC.bonusTime;
-          showMsg('Bip extra +' + CC.bonusTime + 's', '#ffd166');
+          gs.score = (gs.score || 0) + CC.bonusScore;
+          showMsg('Bip extra +' + CC.bonusScore + ' pts', '#ffd166');
         }
       } else if (type === 'bonusClock') {
-        gs.timer += CC.timeBonus;
-        showMsg('+' + CC.timeBonus + 's', '#6bff9e');
+        // Coleccionable de puntuación; NO afecta el cronómetro.
+        gs.score = (gs.score || 0) + CC.score;
+        showMsg('+' + CC.score + ' pts', '#6bff9e');
       } else if (type === 'headphones') {
         gs.headphonesTimer = CC.duration;
         showMsg('Audífonos ' + CC.duration + 's', '#a0c4ff');
@@ -457,8 +461,9 @@ function makeMicro(startX, groundY, assets) {
     doorTimer: 0,
     rW: rW, rH: rH,
 
-    get doorX() { return this.x + rW * 0.28; },
-    get doorW()  { return rW * 0.24; },
+    // Puerta ~centro-izquierda de la carrocería (el frente mira a la derecha).
+    get doorX() { return this.x + rW * 0.40; },
+    get doorW()  { return rW * 0.22; },
 
     update: function(dt) {
       if (this.state === 'arriving') {
@@ -497,8 +502,9 @@ function makeMetro(assets) {
     active: true,
     update: function(dt) { this.x += 420 * dt; },
     draw: function(ctx) {
+      // El tren avanza a la derecha: su frente (cabina) debe mirar a la derecha → flip.
       drawContentFrame(ctx, assets.metro, S2_MANIFEST.metro, 0,
-        this.x + rW / 2, S2C.H / 2 + 120, rH, false);
+        this.x + rW / 2, S2C.H / 2 + 120, rH, true);
     },
   };
 }

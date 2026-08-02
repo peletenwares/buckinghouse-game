@@ -30,10 +30,12 @@ const S2C = {
     smoothing: 7,   // velocidad de seguimiento (mayor = más tenso)
   },
 
-  // Cronómetro
+  // Cronómetro — presupuesto TOTAL de la etapa: 60 s (1:00).
+  // Regla dura: nunca aumenta. No hay bonos de tiempo de ningún tipo.
+  // El cronómetro solo baja; los checkpoints guardan progreso, no suman tiempo.
   timer: {
-    start:         150,
-    minCheckpoint:  10,  // tiempo mínimo garantizado al restaurar checkpoint
+    start:  60,   // HUD inicia en 1:00
+    max:    60,   // techo duro: el cronómetro jamás supera este valor
   },
 
   // Escenas — worldW y groundY.
@@ -43,9 +45,18 @@ const S2C = {
     APARTMENT_RUN:           { worldW: 1980, groundY: 615 },
     MOVING_PLATFORM_CROSSING:{ worldW: 1980, groundY: 600 },
     SANTA_LUCIA_LANES:       { worldW: 1980, groundY: 608 },
-    METRO_GATE:              { worldW:  600, groundY: 600 },
+    METRO_GATE:              { worldW:  800, groundY: 600 },
     BUS_STOP:                { worldW: 1980, groundY: 560 },
     CLINIC_RUN:              { worldW: 1980, groundY: 600 },
+  },
+
+  // Balance y distribución de obstáculos por escena (centralizado).
+  balance: {
+    apartmentPedestrianCount: [3, 5],  // obstáculo principal del piso
+    apartmentVendorMax:       1,
+    busStopPedestrianCount:   [4, 6],
+    busStopVelociraptorCount: [2, 4],
+    busStopVendorMax:         1,
   },
 
   // Background (todos 2084×755)
@@ -99,14 +110,14 @@ const S2C = {
     renderH: 52,
     hitW: 44, hitH: 40, hitOX: 4, hitOY: 4,
     fps: 4,
-    required: 5,     // objetivo visible del HUD
-    bonusTime: 2,    // +s por cada Bip extra una vez alcanzado el objetivo
+    required: 5,        // objetivo visible del HUD
+    bonusScore: 100,    // puntos por cada Bip extra (SIN efecto en el cronómetro)
   },
   bonusClock: {
     renderH: 54,
     hitW: 44, hitH: 44, hitOX: 4, hitOY: 4,
     fps: 4,
-    timeBonus: 5,
+    score: 200,         // coleccionable de puntuación; NO afecta el cronómetro
   },
   headphones: {
     renderH: 52,
@@ -138,13 +149,14 @@ const S2C = {
     fallThreshold: 680,  // jugadora por debajo de esta Y = caída
   },
 
-  // Transiciones cinematográficas
+  // Transiciones cinematográficas (usan el mismo cronómetro global; no lo pausan).
+  // Acortadas para el presupuesto de 60 s.
   metroTransition: {
-    duration:  3.5,
-    skipDelay: 1.0,
+    duration:  2.2,
+    skipDelay: 0.8,
   },
   busTransition: {
-    duration: 3.0,
+    duration: 2.2,
   },
 
   // Metro gate
@@ -153,31 +165,24 @@ const S2C = {
     bipAnimDuration: 2.2,  // s de la animación completa
     turnstileOpenDelay: 1.6,
     doorOpenDelay: 1.8,
-    bonus: 15,
   },
 
   // Bus stop
   busStop: {
-    microArrivalTime: 3.5,   // s tras entrar en la escena
-    doorOpenTime:     8.0,   // s con la puerta abierta
-    microDepartX:    1300,   // X donde sale la micro
-    microSpeedDepart: 300,
-    missWaitTime:     5.0,   // s hasta la siguiente micro
-    bonus: 12,
+    // La PRIMERA micro está presente al entrar con la puerta abierta y espera
+    // sólo firstBusWaitSeconds (reflejo). Las siguientes esperan doorOpenTime.
+    firstBusWaitSeconds: 2.5, // s abierta la primera micro (ventana justa para abordar)
+    doorOpenTime:     6.0,   // s abierta desde la 2ª micro en adelante
+    nextBusDelay:     5.0,   // s hasta la siguiente micro tras perder una (penaliza el reloj global)
+    microDepartX:    2200,   // X donde sale la micro
+    microSpeedDepart: 320,
+    firstMicroX:      700,   // X de la primera micro (ya presente)
   },
 
-  // Checkpoints — bonus por escena
-  checkpointBonus: {
-    APARTMENT_RUN:            15,
-    MOVING_PLATFORM_CROSSING: 20,
-    METRO_GATE:               15,
-    BUS_STOP:                 12,
-  },
-
-  // Victoria — estrellas
+  // Victoria — estrellas (según segundos restantes; presupuesto total 60 s).
   stars: {
-    three: 25,
-    two:   10,
+    three: 15,   // terminar con ≥15 s restantes (run limpio y veloz)
+    two:    5,
   },
 
   // HUD

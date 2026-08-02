@@ -22,6 +22,20 @@ function clampCamera(camX, playerX, worldW) {
   return Math.max(0, Math.min(camX, Math.max(0, worldW - S2C.W)));
 }
 
+// Elige un entero dentro de [min,max].
+function pickCount(range) {
+  return range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1));
+}
+
+// Reparte N valores X repartidos en [x0,x1] con leve jitter (sin solapes).
+function spreadX(n, x0, x1, jitter) {
+  var out = [], step = (x1 - x0) / Math.max(1, n);
+  for (var i = 0; i < n; i++) {
+    out.push(Math.round(x0 + step * (i + 0.5) + (Math.random() * 2 - 1) * (jitter || 0)));
+  }
+  return out;
+}
+
 // Marca vertical de meta reutilizable.
 function drawGoalMarker(ctx, screenX, topY, botY, color, label) {
   if (screenX < -20 || screenX > S2C.W + 20) return;
@@ -140,39 +154,36 @@ function makeApartmentRun(assets, sm) {
   var showMsg;
 
   function buildEntities() {
+    var B = S2C.balance;
     // Suelo invisible alineado con la vereda del fondo.
     platforms = [ makePlatform(0, gY, worldW, 'platWide', assets, { ghost: true }) ];
 
-    vendors = [ makeVendor(640, assets), makeVendor(1360, assets) ];
-    vendors.forEach(function(v) { v.setGround(gY); });
+    // Máx 1 vendedor (obstáculo puntual).
+    vendors = [];
+    if (B.apartmentVendorMax >= 1) { var vd = makeVendor(880, assets); vd.setGround(gY); vendors.push(vd); }
 
-    pedestrians = [ makePedestrian(920, assets), makePedestrian(1580, assets) ];
-    pedestrians.forEach(function(p) { p.setGround(gY); });
+    // Peatones lentos = obstáculo PRINCIPAL (4–6), repartidos entre los saldos.
+    pedestrians = [];
+    spreadX(pickCount(B.apartmentPedestrianCount), 380, 1780, 90).forEach(function(px) {
+      var p = makePedestrian(px, assets); p.setGround(gY); pedestrians.push(p);
+    });
 
     velociraptors = [];
 
-    items = [
-      makeItem(300,  gY - 74, 'bipCredit',  assets),
-      makeItem(520,  gY - 74, 'bipCredit',  assets),
-      makeItem(760,  gY - 74, 'bipCredit',  assets),
-      makeItem(1010, gY - 74, 'bipCredit',  assets),
-      makeItem(1250, gY - 74, 'bipCredit',  assets),
-      makeItem(1500, gY - 74, 'bipCredit',  assets),
-      makeItem(1720, gY - 74, 'bipCredit',  assets),
-      makeItem(1140, gY - 150, 'bonusClock', assets),
-    ];
+    // 6 saldos Bip repartidos ~12/30/48/67/84/95 % del recorrido (nunca juntos).
+    var pcts = [0.12, 0.30, 0.48, 0.67, 0.84, 0.95];
+    items = pcts.map(function(pc) { return makeItem(Math.round(worldW * pc), gY - 74, 'bipCredit', assets); });
+    items.push(makeItem(1140, gY - 150, 'bonusClock', assets));
   }
 
-  var raptorSpawnPoints = [
-    { worldX: 1050, spawned: false },
-    { worldX: 1520, spawned: false },
-  ];
+  // 1 velociraptor como introducción, cerca del final.
+  var raptorSpawnPoints = [ { worldX: 1500, spawned: false } ];
 
   function checkRaptorSpawns() {
     raptorSpawnPoints.forEach(function(sp) {
       if (!sp.spawned && player.x + S2C.W > sp.worldX) {
         sp.spawned = true;
-        velociraptors.push(makeVelociraptor(sp.worldX + 360, gY, assets, false));
+        velociraptors.push(makeVelociraptor(sp.worldX + 340, gY, assets, false));
       }
     });
   }
@@ -204,8 +215,8 @@ function makeApartmentRun(assets, sm) {
           player.vx = 0;
           showMsg('Nico necesita ' + S2C.bipCredit.required + ' saldos Bip', '#ffaa00');
         } else {
-          gs.timer += S2C.checkpointBonus.APARTMENT_RUN;
-          showMsg('¡Saldo listo! +' + S2C.checkpointBonus.APARTMENT_RUN + 's', '#6bff9e');
+          // Checkpoint: solo guarda progreso, NO suma tiempo.
+          showMsg('¡Saldo listo! Al metro', '#6bff9e');
           gs.checkpoint = null;
           sm.transitionTo('MOVING_PLATFORM_CROSSING');
         }
@@ -238,7 +249,8 @@ function makePlatformCrossing(assets, sm) {
 
   var player, camX, showMsg;
   var platforms, autos, items;
-  var respawnX, respawnY, falling;
+  var falling, fade;
+  var START_X = 120;
   var FALL_Y = gY + 70;   // caer al foso
 
   function buildEntities() {
@@ -256,28 +268,40 @@ function makePlatformCrossing(assets, sm) {
 
     autos = [ makeAuto(-60, 170, assets), makeAuto(520, 220, assets), makeAuto(1080, 190, assets) ];
 
-    items = [
-      makeItem(890,  gY - 250, 'bonusClock', assets),
-      makeItem(1360, gY - 230, 'bipCredit',  assets),
-    ];
+    // Sin saldo Bip en el cruce (solo se recoge en APARTMENT_RUN).
+    items = [ makeItem(890, gY - 250, 'bonusClock', assets) ];
+  }
+
+  // Reinicia TODO el cruce: plataformas a su ciclo inicial y Nico al comienzo.
+  function restartCrossing() {
+    platforms.forEach(function(pl) { if (pl.reset) pl.reset(); });
+    player.x = START_X; player.y = gY;
+    player.vx = 0; player.vy = 0;
   }
 
   return {
     enter: function(gs) {
-      player  = makeS2Player(120, gY, assets);
+      player  = makeS2Player(START_X, gY, assets);
       camX    = 0;
       showMsg = gs._showMsg;
-      respawnX = 120; respawnY = gY;
-      falling  = false;
+      falling = false; fade = 0;
       buildEntities();
-      gs.checkpoint = { scene: 'MOVING_PLATFORM_CROSSING', playerX: 120 };
+      // Único checkpoint: el inicio del cruce.
+      gs.checkpoint = { scene: 'MOVING_PLATFORM_CROSSING', playerX: START_X };
     },
 
     update: function(dt, gs) {
+      // Fundido breve tras caer: al llegar al pico, reinicia el cruce completo.
+      if (falling) {
+        fade += dt;
+        if (fade >= 0.28 && fade - dt < 0.28) restartCrossing();
+        if (fade >= 0.56) { falling = false; fade = 0; }
+      }
+
       platforms.forEach(function(pl) { if (pl.update) pl.update(dt); });
       autos.forEach(function(a) { a.update(dt); });
 
-      player.update(dt, platforms, gY + 9999, false);  // sin suelo continuo
+      if (!falling) player.update(dt, platforms, gY + 9999, false);  // sin suelo continuo
 
       if (player.x < 30) { player.x = 30; player.vx = 0; }
       if (player.x > worldW - 20) player.x = worldW - 20;
@@ -285,26 +309,18 @@ function makePlatformCrossing(assets, sm) {
 
       items.forEach(function(it) { it.update(dt); it.collect(player, gs, showMsg); });
 
+      // Caída → penaliza UNA vez, reinicia el cruce entero (sin progreso parcial).
       if (!falling && player.y > FALL_Y) {
-        falling = true;
+        falling = true; fade = 0;
         gs.falls++;
         gs.timer -= S2C.fall.timePenalty;
-        showMsg('-' + S2C.fall.timePenalty + 's — caída', '#ff6b6b');
-        player.invulTimer = S2C.fall.invulDuration;
-        player.stun(0.4);
-        setTimeout(function() {
-          player.x = respawnX; player.y = respawnY;
-          player.vx = 0; player.vy = 0; falling = false;
-        }, 480);
+        showMsg('-' + S2C.fall.timePenalty + 's — vuelta al inicio del cruce', '#ff6b6b');
+        player.vx = 0; player.vy = 0;
       }
 
-      if (player.onGround || player.onPlatform) {
-        if (player.x > respawnX) { respawnX = player.x; respawnY = player.y; }
-      }
-
-      if (player.x >= 1700) {
-        gs.timer += S2C.checkpointBonus.MOVING_PLATFORM_CROSSING;
-        showMsg('+' + S2C.checkpointBonus.MOVING_PLATFORM_CROSSING + 's — ¡cruce logrado!', '#6bff9e');
+      if (!falling && player.x >= 1700) {
+        // Checkpoint: solo guarda progreso, NO suma tiempo.
+        showMsg('¡Cruce logrado!', '#6bff9e');
         sm.transitionTo('SANTA_LUCIA_LANES');
       }
     },
@@ -316,6 +332,13 @@ function makePlatformCrossing(assets, sm) {
       items.forEach(function(it) { if (it.active) it.draw(ctx, camX); });
       player.draw(ctx, camX);
       drawGoalMarker(ctx, 1700 - camX, 80, gY, 'rgba(255,209,102,0.85)', 'Metro');
+      // Fundido de reinicio de cruce
+      if (falling) {
+        var a = 1 - Math.abs(fade - 0.28) / 0.28;   // sube y baja
+        ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, a));
+        ctx.fillStyle = '#0b0b12'; ctx.fillRect(0, 0, S2C.W, S2C.H);
+        ctx.restore();
+      }
     },
 
     getPlayer: function() { return player; },
@@ -377,13 +400,10 @@ function makeSantaLuciaLanes(assets, sm) {
       player.renderH = baseRenderH * laneScale(currentLane);
 
       npcs  = [];
+      // Sin saldo Bip aquí (solo se recoge en APARTMENT_RUN).
       items = [
-        makeItem(340,  LANES[1] - 52, 'bipCredit',  assets),
-        makeItem(560,  LANES[0] - 52, 'bipCredit',  assets),
-        makeItem(880,  LANES[2] - 52, 'bipCredit',  assets),
-        makeItem(1180, LANES[1] - 52, 'bipCredit',  assets),
-        makeItem(1460, LANES[0] - 52, 'headphones', assets),
-        makeItem(1720, LANES[2] - 52, 'bonusClock', assets),
+        makeItem(700,  LANES[0] - 52, 'headphones', assets),
+        makeItem(1300, LANES[2] - 52, 'bonusClock', assets),
       ];
 
       // Peatones lentos en carriles de fondo/medio
@@ -442,7 +462,7 @@ function makeSantaLuciaLanes(assets, sm) {
       items.forEach(function(it) { it.update(dt); it.collect(player, gs, showMsg); });
 
       if (player.x >= worldW - 60) {
-        gs.timer += 6;
+        // Checkpoint: solo avanza de escena, NO suma tiempo.
         sm.transitionTo('METRO_GATE');
       }
     },
@@ -468,6 +488,9 @@ function makeSantaLuciaLanes(assets, sm) {
       drawables.push({ sy: player.y, d: function(){ player.draw(ctx, camX); } });
       drawables.sort(function(a, b) { return a.sy - b.sy; });
       drawables.forEach(function(o) { o.d(); });
+
+      // Única entrada exterior visible = meta.
+      drawGoalMarker(ctx, worldW - 60 - camX, 120, LANES[2], 'rgba(107,255,158,0.9)', 'Entrada Metro');
 
       var laneLabels = ['Fondo', 'Central', 'Frente'];
       ctx.font = '13px "Nunito",system-ui,sans-serif';
@@ -499,6 +522,8 @@ function makeMetroGate(assets, sm) {
   var CFG    = S2C.scenes.METRO_GATE;
   var gY     = CFG.groundY;
   var timer  = 0;
+  var descent = 0;           // transición breve "bajando al metro"
+  var DESCENT = 0.9;
   var bipAnimDone = false;
   var turnstile, validator, player, showMsg;
 
@@ -512,17 +537,19 @@ function makeMetroGate(assets, sm) {
 
   return {
     enter: function(gs) {
-      timer  = 0; bipAnimDone = false;
+      timer  = 0; descent = 0; bipAnimDone = false;
       player = makeS2Player(80, gY, assets);
       player.state = 'walk'; player.setAnim('walk');
       player.vx = S2C.moveSpeed;
       showMsg = gs._showMsg;
-      turnstile = makeTurnstile(430, gY - 96, assets);
+      turnstile = makeTurnstile(470, gY - 96, assets);
       validator = makeValidator(360, gY - 84, assets);
       gs.checkpoint = null;
     },
 
     update: function(dt, gs) {
+      // Transición breve de descenso antes de la cutscene del torniquete.
+      if (descent < DESCENT) { descent += dt; return; }
       timer += dt;
       if (timer < 0.9) { player.x += S2C.moveSpeed * 0.6 * dt; player.x = Math.min(player.x, 300); }
 
@@ -539,8 +566,7 @@ function makeMetroGate(assets, sm) {
       if (turnstile) turnstile.update(dt);
 
       if (timer >= S2C.metroGate.bipAnimDuration + 0.4) {
-        gs.timer += S2C.checkpointBonus.METRO_GATE;
-        showMsg('+' + S2C.checkpointBonus.METRO_GATE + 's', '#6bff9e');
+        // Validación Bip completada; NO suma tiempo.
         sm.transitionTo('METRO_TRANSITION');
       }
     },
@@ -562,6 +588,18 @@ function makeMetroGate(assets, sm) {
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(phase, S2C.W / 2, S2C.H - 48);
+        ctx.restore();
+      }
+
+      // Overlay de descenso al metro (transición breve).
+      if (descent < DESCENT) {
+        ctx.save();
+        ctx.globalAlpha = 1 - descent / DESCENT * 0.6;
+        ctx.fillStyle = '#0b0b12'; ctx.fillRect(0, 0, S2C.W, S2C.H);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+        ctx.font = 'bold 20px "Nunito",system-ui,sans-serif';
+        ctx.fillText('Bajando al metro…', S2C.W / 2, S2C.H / 2);
         ctx.restore();
       }
     },
@@ -620,40 +658,54 @@ function makeBusStop(assets, sm) {
   var gY     = CFG.groundY;
   var BUS    = S2C.busStop;
 
+  var B2 = S2C.balance;
   var player, camX, showMsg;
-  var platforms, vendors, velociraptors, items;
+  var platforms, vendors, pedestrians, velociraptors, items;
+  var pedestriansN;
   var micro;
-  var microTimer, doorTimer, doorOpen, missWait, microCount;
+  var doorTimer, doorOpen, missWait, microCount;
 
   function buildEntities() {
     platforms = [ makePlatform(0, gY, worldW, 'platWide', assets, { ghost: true }) ];
-    vendors   = [ makeVendor(360, assets), makeVendor(1180, assets) ];
-    vendors.forEach(function(v) { v.setGround(gY); });
-    velociraptors = [];
-    items = [
-      makeItem(260,  gY - 74, 'bipCredit',  assets),
-      makeItem(620,  gY - 74, 'bipCredit',  assets),
-      makeItem(500,  gY - 150, 'bonusClock', assets),
-    ];
-  }
 
-  function spawnMicro() {
-    micro = makeMicro(-360, gY, assets);
-    doorTimer = 0; doorOpen = false;
-    microTimer = BUS.microArrivalTime;
+    // Máx 1 vendedor (obstáculo puntual), fuera del pasillo de la 1ª micro.
+    vendors = [];
+    if (B2.busStopVendorMax >= 1) { var vd = makeVendor(300, assets); vd.setGround(gY); vendors.push(vd); }
+
+    // Peatones lentos (4–6): obstáculo principal. Posiciones que NO tapan el
+    // pasillo hacia la puerta al arrancar; los de la izquierda derivan a la derecha.
+    var pedSlots = [180, 360, 1040, 1260, 1520, 1780];
+    pedestriansN = pickCount(B2.busStopPedestrianCount);
+    pedestrians = [];
+    pedSlots.slice(0, pedestriansN).forEach(function(px) {
+      var p = makePedestrian(px, assets); p.setGround(gY); pedestrians.push(p);
+    });
+
+    // Velociraptores (2–4): entran desde la derecha y cruzan hacia la puerta.
+    var rapSlots = [1180, 1420, 1680, 1920];
+    var rapN = pickCount(B2.busStopVelociraptorCount);
+    velociraptors = [];
+    rapSlots.slice(0, rapN).forEach(function(rx, i) {
+      velociraptors.push(makeVelociraptor(rx, gY, assets, i % 2 === 0));
+    });
+
+    // Sin saldo Bip aquí; solo un reloj bonus fuera del pasillo.
+    items = [ makeItem(1120, gY - 150, 'bonusClock', assets) ];
   }
 
   return {
     enter: function(gs) {
-      player  = makeS2Player(90, gY, assets);
-      camX    = 0;
+      // Nico aparece cerca (alcanza la puerta en <1s si reacciona ya).
+      player  = makeS2Player(600, gY, assets);
+      camX    = clampCamera(0, player.x, worldW);
       showMsg = gs._showMsg;
-      microTimer = BUS.microArrivalTime;
-      doorTimer = 0; doorOpen = false; missWait = 0; microCount = 0;
-      micro = null;
+      doorOpen = false; missWait = 0; microCount = 1;
       buildEntities();
-      velociraptors.push(makeVelociraptor(1000, gY, assets, true));
-      gs.checkpoint = { scene: 'BUS_STOP', playerX: 90 };
+      // 1ª micro YA presente y con la puerta ABIERTA desde el primer frame.
+      micro = makeMicro(BUS.firstMicroX, gY, assets);
+      micro.x = BUS.firstMicroX; micro.state = 'open';
+      doorOpen = true; doorTimer = BUS.firstBusWaitSeconds;
+      gs.checkpoint = { scene: 'BUS_STOP', playerX: 600 };
     },
 
     update: function(dt, gs) {
@@ -663,50 +715,53 @@ function makeBusStop(assets, sm) {
       camX = clampCamera(camX, player.x, worldW);
 
       vendors.forEach(function(v) { v.update(dt); v.checkCollision(player, gs, showMsg); });
+      pedestrians.forEach(function(p) { p.update(dt); p.checkCollision(player); });
       velociraptors.forEach(function(v) { v.update(dt, camX - S2C.W); v.checkCollision(player, gs, showMsg); });
       velociraptors = velociraptors.filter(function(v) { return v.active; });
       items.forEach(function(it) { it.update(dt); it.collect(player, gs, showMsg); });
 
-      if (!micro && missWait <= 0) {
-        microTimer -= dt;
-        if (microTimer <= 0) { spawnMicro(); microCount++; }
-      }
-
       if (micro && micro.active) {
         micro.update(dt);
         if (micro.state === 'open') {
-          if (!doorOpen) { doorOpen = true; doorTimer = BUS.doorOpenTime; }
+          if (!doorOpen) {  // micro 2ª+ recién abierta: ventana amplia (documentado)
+            doorOpen = true; doorTimer = BUS.doorOpenTime;
+          }
           doorTimer -= dt;
 
           var pb = player.hitbox();
           var doorHit = { x: micro.doorX, y: micro.y, w: micro.doorW, h: micro.rH };
           if (pb.x + pb.w > doorHit.x && pb.x < doorHit.x + doorHit.w) {
             if (microCount === 1) gs.caughtFirstBus = true;
-            gs.timer += BUS.bonus;
-            showMsg('¡Micro a tiempo! +' + BUS.bonus + 's', '#6bff9e');
+            // Abordar avanza de escena; NO suma tiempo.
+            showMsg('¡Subiste a la micro!', '#6bff9e');
             sm.transitionTo('BUS_TRANSITION');
             return;
           }
           if (doorTimer <= 0) {
             micro.state = 'leaving'; doorOpen = false;
-            showMsg('Se fue la micro… espera 5s', '#ffaa00');
-            missWait = BUS.missWaitTime;
+            showMsg('Se fue la micro… ' + BUS.nextBusDelay + 's para la próxima', '#ffaa00');
+            missWait = BUS.nextBusDelay;
           }
         }
       } else if (micro && !micro.active) {
         micro = null;
-        if (missWait <= 0) microTimer = BUS.microArrivalTime;
       }
 
-      if (missWait > 0) { missWait -= dt; if (missWait <= 0) microTimer = BUS.microArrivalTime; }
+      // Espera de 5s y llega la siguiente micro (reloj global nunca se detiene).
+      if (!micro && missWait > 0) {
+        missWait -= dt;
+        if (missWait <= 0) {
+          micro = makeMicro(-380, gY, assets);  // 2ª+ llega desde la izquierda
+          microCount++; doorOpen = false;
+        }
+      }
     },
 
     draw: function(ctx, gs) {
       drawBg(ctx, assets.bgBusStop, S2_MANIFEST.bgBusStop, camX);
-      // El paradero ya está pintado en el fondo (no dibujar prop duplicado).
+      // El paradero ya está pintado en el fondo (no se dibuja prop duplicado).
 
-      var actors = [player].concat(vendors, velociraptors.filter(function(v){return v.active;}));
-      // La micro llega en primer plano (se dibuja al final si está presente).
+      var actors = [player].concat(vendors, pedestrians, velociraptors.filter(function(v){return v.active;}));
       items.forEach(function(it) { if (it.active) it.draw(ctx, camX); });
       actors.sort(function(a,b){ return (a.y + (a.h||0)) - (b.y + (b.h||0)); });
       actors.forEach(function(a){ a.draw(ctx, camX); });
@@ -714,16 +769,16 @@ function makeBusStop(assets, sm) {
       if (micro && micro.active) {
         micro.draw(ctx, camX);
         if (doorOpen && doorTimer > 0) {
-          ctx.font = 'bold 22px "Nunito",system-ui,sans-serif';
+          ctx.font = 'bold 26px "Nunito",system-ui,sans-serif';
           ctx.fillStyle = doorTimer < 3 ? '#ff6b6b' : '#ffd166';
           ctx.textAlign = 'center';
-          ctx.fillText(Math.ceil(doorTimer) + 's', Math.round(micro.x + micro.rW / 2 - camX), micro.y - 12);
+          ctx.fillText('¡Sube! ' + Math.ceil(doorTimer) + 's', Math.round(micro.x + micro.rW / 2 - camX), micro.y - 14);
         }
-      } else if (microTimer > 0 && !micro) {
+      } else if (missWait > 0) {
         ctx.font = 'bold 16px "Nunito",system-ui,sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.textAlign = 'center';
-        ctx.fillText('Próxima micro: ' + Math.ceil(microTimer) + 's', S2C.W / 2, 84);
+        ctx.fillText('Próxima micro: ' + Math.ceil(missWait) + 's', S2C.W / 2, 84);
       }
     },
 
@@ -731,9 +786,9 @@ function makeBusStop(assets, sm) {
     boardHint: function() {
       if (!micro || !micro.active) return { present: false, open: false, doorX: null };
       return { present: true, open: micro.state === 'open',
-               doorX: micro.doorX + micro.doorW / 2, doorW: micro.doorW, microTimer: microTimer };
+               doorX: micro.doorX + micro.doorW / 2, doorW: micro.doorW };
     },
-    debugInfo: function() { return { groundY: gY, platforms: platforms, actors: [player].concat(vendors,velociraptors), items: items, camX: camX, worldW: worldW, micro: micro }; },
+    debugInfo: function() { return { groundY: gY, platforms: platforms, actors: [player].concat(vendors,pedestrians,velociraptors), items: items, camX: camX, worldW: worldW, micro: micro }; },
   };
 }
 
@@ -787,15 +842,12 @@ function makeClinicRun(assets, sm) {
 
   function buildEntities() {
     platforms = [ makePlatform(0, gY, worldW, 'platWide', assets, { ghost: true }) ];
-    vendors   = [ makeVendor(460, assets), makeVendor(1150, assets) ];
+    // Tramo final: 1 vendedor + 1 raptor (carga aligerada para el presupuesto de 60 s).
+    vendors   = [ makeVendor(700, assets) ];
     vendors.forEach(function(v) { v.setGround(gY); });
     velociraptors = [ makeVelociraptor(1350, gY, assets, true) ];
-    items = [
-      makeItem(360,  gY - 74, 'bipCredit',  assets),
-      makeItem(720,  gY - 74, 'bipCredit',  assets),
-      makeItem(920,  gY - 150,'bonusClock', assets),
-      makeItem(1300, gY - 74, 'bipCredit',  assets),
-    ];
+    // Sólo un reloj bonus de puntuación (el objetivo Bip ya se cumplió en el piso).
+    items = [ makeItem(920, gY - 150, 'bonusClock', assets) ];
   }
 
   return {
