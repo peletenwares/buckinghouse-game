@@ -7,20 +7,46 @@ function overlaps(a, b) {
          a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function drawSpriteFrame(ctx, entry, def, frame, dx, dy, renderH, flipX) {
-  if (!entry || !entry.ok) return;
-  var col = frame % def.cols;
-  var row = Math.floor(frame / def.cols);
-  var sx = col * def.fw, sy = row * def.fh;
-  var dw = renderH, dh = renderH; // frame cuadrado
+// Nº de frames reales de un asset (content-boxes en el manifest).
+function s2FrameCount(key) {
+  var def = S2_MANIFEST[key];
+  return (def && def.frames && def.frames.length) ? def.frames.length : 1;
+}
+
+// Dibuja el frame `idx` de una hoja usando su content-box real, escalado a
+// `targetH` preservando aspecto. Ancla:
+//   - 'feet'   → (footX, footY) = base centro (pies)
+//   - 'center' → (footX, footY) = centro del sprite
+// El anchor se toma de def.anchor salvo override.
+function drawContentFrame(ctx, entry, def, idx, footX, footY, targetH, flipX, anchorOverride) {
+  if (!entry || !entry.ok || !def || !def.frames || !def.frames.length) return;
+  var n = def.frames.length;
+  var i = ((Math.floor(idx) % n) + n) % n;
+  var f = def.frames[i];
+  var scale = targetH / def.refH;
+  var dw = f.sw * scale, dh = f.sh * scale;
+  var anchor = anchorOverride || def.anchor || 'feet';
+  var dx = footX - dw / 2;
+  var dy = (anchor === 'center') ? (footY - dh / 2) : (footY - dh);
   ctx.save();
   if (flipX) {
     ctx.scale(-1, 1);
-    ctx.drawImage(entry.img, sx, sy, def.fw, def.fh, -(Math.round(dx) + dw), Math.round(dy), dw, dh);
+    ctx.drawImage(entry.img, f.sx, f.sy, f.sw, f.sh,
+      -(Math.round(dx) + dw), Math.round(dy), dw, dh);
   } else {
-    ctx.drawImage(entry.img, sx, sy, def.fw, def.fh, Math.round(dx), Math.round(dy), dw, dh);
+    ctx.drawImage(entry.img, f.sx, f.sy, f.sw, f.sh,
+      Math.round(dx), Math.round(dy), dw, dh);
   }
   ctx.restore();
+}
+
+// Dibuja un content-box estirado a un rectángulo lógico exacto (para plataformas).
+function drawContentStretched(ctx, entry, def, idx, dx, dy, dw, dh) {
+  if (!entry || !entry.ok || !def || !def.frames || !def.frames.length) return false;
+  var f = def.frames[idx % def.frames.length];
+  ctx.drawImage(entry.img, f.sx, f.sy, f.sw, f.sh,
+    Math.round(dx), Math.round(dy), Math.round(dw), Math.round(dh));
+  return true;
 }
 
 function advanceFrame(entity, dt, fps, totalFrames, loop) {
@@ -36,6 +62,7 @@ function advanceFrame(entity, dt, fps, totalFrames, loop) {
 // ── Plataforma estática ───────────────────────────────────────────────────────
 function makePlatform(x, y, w, assetKey, assets) {
   var C = S2C.platform;
+  // altura visual proporcional al ancho del asset (para no aplastar)
   return {
     x: x, y: y, w: w, h: C.h,
     active: true,
@@ -44,16 +71,13 @@ function makePlatform(x, y, w, assetKey, assets) {
     draw: function(ctx, camX) {
       var entry = assets[assetKey];
       var def   = S2_MANIFEST[assetKey];
-      if (!entry || !entry.ok || !def) {
-        // fallback visual mínimo (no usar si asset carga)
-        ctx.fillStyle = 'rgba(80,60,40,0.8)';
+      // Altura visual del sprite (mantiene su aspecto sobre el ancho lógico)
+      var visH = def && def.refW ? Math.min(this.w * def.refH / def.refW, 120) : this.h;
+      var dy   = this.y + this.h - visH;  // apoyar la superficie superior lógica
+      if (!drawContentStretched(ctx, entry, def, 0, this.x - camX, dy, this.w, visH)) {
+        ctx.fillStyle = 'rgba(80,60,40,0.85)';
         ctx.fillRect(this.x - camX, this.y, this.w, this.h);
-        return;
       }
-      // Renderizar frame 0, estirado al ancho lógico
-      var sx = 0, sy = 0, sw = def.fw, sh = def.fh;
-      ctx.drawImage(entry.img, sx, sy, sw, sh,
-        Math.round(this.x - camX), Math.round(this.y), this.w, this.h);
     },
     drawDebug: function(ctx, camX) {
       ctx.strokeStyle = 'rgba(255,200,0,0.7)';
@@ -80,13 +104,12 @@ function makeMovingPlatform(x, yMin, yMax, w, speed, assetKey, assets) {
     draw: function(ctx, camX) {
       var entry = assets[assetKey];
       var def   = S2_MANIFEST[assetKey];
-      if (!entry || !entry.ok || !def) {
-        ctx.fillStyle = 'rgba(60,90,140,0.8)';
+      var visH = def && def.refW ? Math.min(this.w * def.refH / def.refW, 90) : this.h;
+      var dy   = this.y + this.h - visH;
+      if (!drawContentStretched(ctx, entry, def, 0, this.x - camX, dy, this.w, visH)) {
+        ctx.fillStyle = 'rgba(60,90,140,0.85)';
         ctx.fillRect(this.x - camX, this.y, this.w, this.h);
-        return;
       }
-      ctx.drawImage(entry.img, 0, 0, def.fw, def.fh,
-        Math.round(this.x - camX), Math.round(this.y), this.w, this.h);
     },
     drawDebug: function(ctx, camX) {
       ctx.strokeStyle = 'rgba(100,200,255,0.7)';
@@ -102,18 +125,16 @@ function makeMovingPlatform(x, yMin, yMax, w, speed, assetKey, assets) {
 
 // ── Barrera de obra ───────────────────────────────────────────────────────────
 function makeBarrier(x, y, assets) {
-  var rH = 72;
+  var rH = 80;
   return {
-    x: x, y: y, w: 44, h: rH,
+    x: x, y: y, w: 90, h: rH,
     active: true,
     _frame: 0, _animTimer: 0,
-    hitbox: function() { return { x: this.x + 4, y: this.y, w: 36, h: rH }; },
-    update: function(dt) { advanceFrame(this, dt, 2, 6, true); },
+    hitbox: function() { return { x: this.x + 8, y: this.y, w: this.w - 16, h: rH }; },
+    update: function(dt) {},
     draw: function(ctx, camX) {
-      var entry = assets.barrierProp;
-      var def   = S2_MANIFEST.barrierProp;
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y - rH + this.h, rH, false);
+      drawContentFrame(ctx, assets.barrierProp, S2_MANIFEST.barrierProp, 0,
+        this.x + this.w / 2 - camX, this.y + rH, rH, false);
     },
   };
 }
@@ -122,7 +143,6 @@ function makeBarrier(x, y, assets) {
 function makeVendor(x, assets) {
   var CC = S2C.vendor;
   var rH = CC.renderH;
-  var groundY = 0; // se asigna en init de la escena
   return {
     x: x, y: 0,
     w: rH, h: rH,
@@ -132,14 +152,12 @@ function makeVendor(x, assets) {
     setGround: function(gy) { this.y = gy - rH; },
     hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
     update: function(dt) {
-      advanceFrame(this, dt, CC.fps, CC.totalFrames, true);
+      advanceFrame(this, dt, CC.fps, s2FrameCount('vendor'), true);
       if (this.cooldown > 0) this.cooldown -= dt;
     },
     draw: function(ctx, camX) {
-      var entry = assets.vendor;
-      var def   = S2_MANIFEST.vendor;
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y, rH, false);
+      drawContentFrame(ctx, assets.vendor, S2_MANIFEST.vendor, this._frame,
+        this.x + rH / 2 - camX, this.y + rH, rH, false);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -172,14 +190,12 @@ function makePedestrian(x, assets) {
     setGround: function(gy) { this.y = gy - rH; },
     hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
     update: function(dt) {
-      advanceFrame(this, dt, CC.fps, CC.totalFrames, true);
+      advanceFrame(this, dt, CC.fps, s2FrameCount('pedestrian'), true);
       this.x += this.speed * dt;
     },
     draw: function(ctx, camX) {
-      var entry = assets.pedestrian;
-      var def   = S2_MANIFEST.pedestrian;
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y, rH, false);
+      drawContentFrame(ctx, assets.pedestrian, S2_MANIFEST.pedestrian, this._frame,
+        this.x + rH / 2 - camX, this.y + rH, rH, false);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -191,19 +207,18 @@ function makePedestrian(x, assets) {
       var hb = this.hitbox();
       var pb = player.hitbox();
       if (!overlaps(pb, hb)) return;
-      // Bloqueo suave: empujar al jugador fuera
-      if (pb.x + pb.w / 2 < hb.x + hb.w / 2) {
-        player.x = hb.x - pb.w / 2 - player.hitOX;
+      if (player.x < hb.x + hb.w / 2) {
+        player.x = hb.x - player.hitW / 2;
         player.vx = Math.min(player.vx, 0);
       } else {
-        player.x = hb.x + hb.w + pb.w / 2 - player.hitOX + player.hitW;
+        player.x = hb.x + hb.w + player.hitW / 2;
         player.vx = Math.max(player.vx, this.speed);
       }
     },
   };
 }
 
-// ── Velociraptor (NPC) ────────────────────────────────────────────────────────
+// ── Velociraptor (abuela apurada) (NPC) ───────────────────────────────────────
 function makeVelociraptor(x, laneY, assets, useAlt) {
   var CC = S2C.velociraptor;
   var rH = CC.renderH;
@@ -215,19 +230,18 @@ function makeVelociraptor(x, laneY, assets, useAlt) {
     _frame: 0, _animTimer: 0,
     cooldown: 0,
     lane: null,
+    assetKey: key,
     hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
     update: function(dt, worldLeft) {
-      advanceFrame(this, dt, CC.fps, CC.totalFrames, true);
+      advanceFrame(this, dt, CC.fps, s2FrameCount(key), true);
       if (this.cooldown > 0) this.cooldown -= dt;
       this.x -= CC.speed * dt;
       if (this.x < worldLeft - rH * 2) this.active = false;
     },
     draw: function(ctx, camX) {
-      var entry = assets[key];
-      var def   = S2_MANIFEST[key];
-      if (!entry || !entry.ok) return;
-      // raptor mira a la izquierda (viene de la derecha)
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y, rH, true);
+      // mira a la izquierda (viene de la derecha) → flip
+      drawContentFrame(ctx, assets[key], S2_MANIFEST[key], this._frame,
+        this.x + rH / 2 - camX, this.y + rH, rH, true);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -268,12 +282,11 @@ function makeSinger(x, assets, gender) {
     },
     hitbox: function() { return this.influenceBox(); },
     update: function(dt) {
-      advanceFrame(this, dt, CC.fps, CC.totalFrames, true);
+      advanceFrame(this, dt, CC.fps, s2FrameCount(key), true);
       noteTimer += dt;
-      if (noteTimer > 0.4) {
+      if (noteTimer > 0.45) {
         noteTimer = 0;
-        notes.push({ x: this.x + rH * 0.5, y: this.y, vy: -40, alpha: 1.0,
-                     frame: Math.floor(Math.random() * 4) });
+        notes.push({ x: this.x + rH * 0.5, y: this.y, vy: -40, alpha: 1.0 });
       }
       for (var i = notes.length - 1; i >= 0; i--) {
         notes[i].y  += notes[i].vy * dt;
@@ -282,23 +295,18 @@ function makeSinger(x, assets, gender) {
       }
     },
     draw: function(ctx, camX) {
-      var entry = assets[key];
-      var def   = S2_MANIFEST[key];
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y, rH, false);
-      // Notas musicales desde FX
+      drawContentFrame(ctx, assets[key], S2_MANIFEST[key], this._frame,
+        this.x + rH / 2 - camX, this.y + rH, rH, false);
+      // Notas musicales (FX icono de notas)
       var fxEntry = assets.fx;
       var fxDef   = S2_MANIFEST.fx;
+      var noteFrame = S2C.fx.noteFrames[0];
       var nRH = S2C.fx.renderH;
       notes.forEach(function(n) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, n.alpha);
-        if (fxEntry && fxEntry.ok && fxDef) {
-          var col = n.frame % fxDef.cols;
-          var row = Math.floor(n.frame / fxDef.cols);
-          ctx.drawImage(fxEntry.img, col * fxDef.fw, row * fxDef.fh, fxDef.fw, fxDef.fh,
-            Math.round(n.x - camX - nRH / 2), Math.round(n.y), nRH, nRH);
-        }
+        drawContentFrame(ctx, fxEntry, fxDef, noteFrame,
+          n.x - camX, n.y, nRH, false, 'center');
         ctx.restore();
       });
     },
@@ -326,12 +334,11 @@ function makeItem(x, y, type, assets) {
     hitbox: function() {
       return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH };
     },
-    update: function(dt) { advanceFrame(this, dt, CC.fps, CC.totalFrames, true); },
+    update: function(dt) { advanceFrame(this, dt, CC.fps, s2FrameCount(assetKey), true); },
     draw: function(ctx, camX) {
-      var entry = assets[assetKey];
-      var def   = S2_MANIFEST[assetKey];
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y, rH, false);
+      // Ancla 'center' sobre el centro del hitbox
+      drawContentFrame(ctx, assets[assetKey], S2_MANIFEST[assetKey], this._frame,
+        this.x + CC.hitOX + CC.hitW / 2 - camX, this.y + CC.hitOY + CC.hitH / 2, rH, false, 'center');
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -359,29 +366,26 @@ function makeItem(x, y, type, assets) {
 
 // ── Torniquete ────────────────────────────────────────────────────────────────
 function makeTurnstile(x, y, assets) {
-  // frames: 0-2 = cerrado, 3-5 = abriendo
-  var rH = 90;
+  // frames: 0 cerrado(rojo) … 4 abierto
+  var rH = 96;
+  var TOTAL = s2FrameCount('turnstile');
   return {
     x: x, y: y,
     active: true,
     state: 'closed',  // closed | opening | open
     _frame: 0, _animTimer: 0,
-    openTimer: 0,
     draw: function(ctx, camX) {
-      var entry = assets.turnstile;
-      var def   = S2_MANIFEST.turnstile;
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y - rH, rH, false);
+      drawContentFrame(ctx, assets.turnstile, S2_MANIFEST.turnstile, this._frame,
+        this.x - camX, this.y + rH, rH, false);
     },
     open: function() {
       if (this.state !== 'closed') return;
       this.state = 'opening';
-      this._frame = 0;
     },
     update: function(dt) {
       if (this.state === 'opening') {
-        advanceFrame(this, dt, 4, 6, false);
-        if (this._frame >= 5) { this.state = 'open'; }
+        advanceFrame(this, dt, 6, TOTAL, false);
+        if (this._frame >= TOTAL - 1) this.state = 'open';
       }
     },
   };
@@ -389,49 +393,50 @@ function makeTurnstile(x, y, assets) {
 
 // ── Validador Bip ─────────────────────────────────────────────────────────────
 function makeValidator(x, y, assets) {
-  var rH = 70;
+  var rH = 84;
   return {
     x: x, y: y,
     active: true,
     _frame: 0, _animTimer: 0,
     activated: false,
+    blink: 0,
     draw: function(ctx, camX) {
-      var entry = assets.validator;
-      var def   = S2_MANIFEST.validator;
-      if (!entry || !entry.ok) return;
-      drawSpriteFrame(ctx, entry, def, this._frame, this.x - camX, this.y - rH, rH, false);
-    },
-    activate: function() {
-      if (this.activated) return;
-      this.activated = true;
-    },
-    update: function(dt) {
+      drawContentFrame(ctx, assets.validator, S2_MANIFEST.validator, 0,
+        this.x - camX, this.y + rH, rH, false);
+      // Destello verde al activar
       if (this.activated) {
-        advanceFrame(this, dt, 5, 4, true);
+        ctx.save();
+        ctx.globalAlpha = 0.35 + 0.35 * Math.sin(this.blink * 12);
+        ctx.fillStyle = '#6bff9e';
+        ctx.beginPath();
+        ctx.arc(this.x - camX, this.y + rH * 0.5, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     },
+    activate: function() { this.activated = true; },
+    update: function(dt) { if (this.activated) this.blink += dt; },
   };
 }
 
 // ── Micro (autobús) ───────────────────────────────────────────────────────────
 function makeMicro(startX, groundY, assets) {
-  var rH = 130;
-  var rW = rH; // frame cuadrado
+  var rH = 140;
+  var def = S2_MANIFEST.micro;
+  var rW = def && def.refW ? rH * def.refW / def.refH : rH;  // aspecto real
   return {
     x: startX, y: groundY - rH,
-    state: 'arriving',  // arriving | open | closing | leaving
+    state: 'arriving',  // arriving | open | leaving
     active: true,
-    _frame: 0, _animTimer: 0,
     doorTimer: 0,
+    rW: rW, rH: rH,
 
-    // X de la puerta (donde el jugador sube)
-    get doorX() { return this.x + 20; },
-    get doorW()  { return 36; },
+    get doorX() { return this.x + rW * 0.28; },
+    get doorW()  { return rW * 0.22; },
 
     update: function(dt) {
-      advanceFrame(this, dt, 6, 6, true);
       if (this.state === 'arriving') {
-        var target = 800;
+        var target = 720;
         this.x += (target - this.x) * Math.min(1, dt * 3);
         if (Math.abs(this.x - target) < 2) { this.x = target; this.state = 'open'; }
       } else if (this.state === 'leaving') {
@@ -440,20 +445,15 @@ function makeMicro(startX, groundY, assets) {
       }
     },
     draw: function(ctx, camX) {
-      var entry = assets.micro;
-      var def   = S2_MANIFEST.micro;
-      if (!entry || !entry.ok) return;
-      var frame = this._frame % (def.cols * def.rows);
-      var col = frame % def.cols;
-      var row = Math.floor(frame / def.cols);
-      ctx.drawImage(entry.img, col * def.fw, row * def.fh, def.fw, def.fh,
-        Math.round(this.x - camX), Math.round(this.y), rW, rH);
+      var frame = (this.state === 'open') ? 1 : 0;  // 1=puerta abierta
+      drawContentFrame(ctx, assets.micro, S2_MANIFEST.micro, frame,
+        this.x + rW / 2 - camX, this.y + rH, rH, false);
     },
     drawDebug: function(ctx, camX) {
       ctx.strokeStyle = '#0ff'; ctx.lineWidth = 1;
       ctx.strokeRect(this.x - camX, this.y, rW, rH);
       if (this.state === 'open') {
-        ctx.fillStyle = 'rgba(0,255,255,0.1)';
+        ctx.fillStyle = 'rgba(0,255,255,0.15)';
         ctx.fillRect(this.doorX - camX, this.y, this.doorW, rH);
       }
     },
@@ -462,50 +462,39 @@ function makeMicro(startX, groundY, assets) {
 
 // ── Metro (tren — solo transición visual) ────────────────────────────────────
 function makeMetro(assets) {
-  var rH = 160;
+  var rH = 150;
+  var def = S2_MANIFEST.metro;
+  var rW = def && def.refW ? rH * def.refW / def.refH : rH * 4;
   return {
-    x: -rH, y: 0,
+    x: -rW, y: 0,
+    rW: rW, rH: rH,
     active: true,
-    _frame: 0, _animTimer: 0,
-    update: function(dt) {
-      advanceFrame(this, dt, 8, 6, true);
-      this.x += 420 * dt;
-    },
+    update: function(dt) { this.x += 420 * dt; },
     draw: function(ctx) {
-      var entry = assets.metro;
-      var def   = S2_MANIFEST.metro;
-      if (!entry || !entry.ok) return;
-      var frame = this._frame % (def.cols * def.rows);
-      var col = frame % def.cols;
-      var row = Math.floor(frame / def.cols);
-      ctx.drawImage(entry.img, col * def.fw, row * def.fh, def.fw, def.fh,
-        Math.round(this.x), Math.round(this.y + 280), rH * 3, rH);
+      drawContentFrame(ctx, assets.metro, S2_MANIFEST.metro, 0,
+        this.x + rW / 2, S2C.H / 2 + 120, rH, false);
     },
   };
 }
 
 // ── Autos (hazard visual en cruce) ───────────────────────────────────────────
 function makeAuto(x, speed, assets) {
-  var rH = 60;
+  var rH = 74;
+  var def = S2_MANIFEST.autos;
+  var rW = def && def.refW ? rH * def.refW / def.refH : rH * 1.5;
+  var variant = Math.floor(Math.random() * s2FrameCount('autos'));  // 1 auto fijo
   return {
-    x: x, y: S2C.fall.fallThreshold - rH,
+    x: x, y: S2C.fall.fallThreshold - rH + 6,
+    rW: rW, rH: rH,
     active: true,
-    _frame: 0, _animTimer: 0,
     speed: speed,
     update: function(dt) {
-      advanceFrame(this, dt, 6, 6, true);
       this.x += this.speed * dt;
-      if (this.x > S2C.W + 200) this.x = -200;
+      if (this.x > S2C.W + 220) this.x = -220;
     },
     draw: function(ctx) {
-      var entry = assets.autos;
-      var def   = S2_MANIFEST.autos;
-      if (!entry || !entry.ok) return;
-      var frame = (this._frame || 0) % (def.cols * def.rows);
-      var col = frame % def.cols;
-      var row = Math.floor(frame / def.cols);
-      ctx.drawImage(entry.img, col * def.fw, row * def.fh, def.fw, def.fh,
-        Math.round(this.x), Math.round(this.y), rH * 2, rH);
+      drawContentFrame(ctx, assets.autos, S2_MANIFEST.autos, variant,
+        this.x + rW / 2, this.y + rH, rH, this.speed < 0);
     },
   };
 }

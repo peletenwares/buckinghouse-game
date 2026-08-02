@@ -101,37 +101,52 @@ Todos los valores están en `config.js` bajo `S2C`:
 - `S2C.busStop.doorOpenTime`: 8s
 - etc.
 
-## Spritesheets — análisis real (2026-08-02)
+## Spritesheets — mapeo real verificado (QA visual 2026-08-02)
 
-| Asset | Dimensiones | Grilla | Frames | Frame |
-|-------|------------|--------|--------|-------|
-| Fondos ×5 | 2084×755 | imagen única | 1 | — |
-| playerWalk (01) | 1024×1536 | 2×3 | 6 | 512×512 |
-| playerRun (02) | 1024×1536 | 2×3 | 6 | 512×512 |
-| playerIdle (03) | 1536×1024 | 3×2 | 6 | 512×512 |
-| playerJump (04) | 1536×1024 | 3×2 | 6 | 512×512 |
-| playerHurt (05) | 1536×1024 | 3×2 | 6 | 512×512 |
-| playerBip (06) | 1536×1024 | 3×2 | 6 | 512×512 |
-| playerWin (07) | 1536×1024 | 3×2 | 6 | 512×512 |
-| playerLose (08) | 1536×1024 | 3×2 | 6 | 512×512 |
-| vendor | 1024×1536 | 2×3 | 6 | 512×512 |
-| pedestrian | 1536×1024 | 3×2 | 6 | 512×512 |
-| velociraptor | 1024×1536 | 2×3 | 6 | 512×512 |
-| velociraptor2 | 1536×1024 | 3×2 | 6 | 512×512 |
-| singerMale | 1536×1024 | 3×2 | 6 | 512×512 |
-| singerFemale | 1536×1024 | 3×2 | 6 | 512×512 |
-| bipCredit | 1536×1024 | 3×2 | 6 | 512×512 |
-| bonusClock | 1024×1024 | 2×2 | 4 | 512×512 |
-| headphones | 1024×1024 | 2×2 | 4 | 512×512 |
-| fx | 1024×1024 | 4×4 | 16 | 256×256 |
-| autos/metro/micro | 1024×1536 | 2×3 | 6 | 512×512 |
-| platWide/Med/Small | 1536×1024 | 3×2 | 6 | 512×512 |
-| platRest/validator | 1024×1024 | 2×2 | 4 | 512×512 |
-| turnstile | 1536×1024 | 3×2 | 6 | 512×512 |
-| barrierProp/busstopProp | 1536×1024 | 3×2 | 6 | 512×512 |
+Las hojas son arte generado con layout **irregular** (frames no cuadrados,
+personajes que se tocan, padding interno, filas con espaciado variable). **No**
+son grillas uniformes 512×512. Por eso `manifest.js` almacena, por cada frame,
+un **content-box** real `{sx,sy,sw,sh}` recortado ajustado al contenido, más
+`refH`/`refW` (referencia para escalar preservando aspecto) y `anchor`
+(`feet` = pies abajo-centro, `center` = centrado). El manifest se genera con un
+analizador de canal alfa que detecta las bandas de fila reales antes de recortar,
+evitando incluir la cabeza del personaje de la fila vecina.
 
-*Grilla inferida del tamaño: todos usan frame 512×512 o 256×256 (FX).
-La asignación de secuencias a las hojas es tentativa y debe verificarse visualmente.*
+| Asset | Archivo | Dim | Grilla real | Frames usados | Contenido | Anclaje |
+|-------|---------|-----|-------------|---------------|-----------|---------|
+| Fondos ×5 | backgrounds/*.png | 2084×755 | imagen única | 1 | escenarios | — |
+| playerWalk | player/01 | 1024×1536 | 5×3 | 5 (fila 0) | caminar | pies |
+| playerRun | player/01 | 1024×1536 | 5×3 | 9 (filas 1–2) | correr | pies |
+| playerIdle | player/03 | 1536×1024 | 4×1 | 4 | reposo | pies |
+| playerJump | player/04 | 1536×1024 | 5×1 | 5 | salto/impulso | pies |
+| playerHurt | player/05 | 1536×1024 | 4×1 | 4 | golpe (estrellas) | pies |
+| playerBip | player/06 | 1536×1024 | 4×1 | 4 | validar tarjeta | pies |
+| playerWin | player/07 | 1536×1024 | 4×1 | 4 | celebración | pies |
+| playerLose | player/08 | 1536×1024 | 4×1 | 4 | derrota | pies |
+| singerMale | npc/sprite-cantante-callejero | 1536×1024 | 6×1 | 6 | cantante + parlante | pies |
+| singerFemale | npc/…-femenino | 1536×1024 | 6×1 | 6 | cantante | pies |
+| pedestrian | npc/sprites-peaton-lento | 1536×1024 | 6×1 | 6 | peatón | pies |
+| vendor | npc/sprites-vendedor | 1024×1536 | 4×3 | 4 (fila 0) | vendedor con carrito | pies |
+| velociraptor | npc/sprites-velociraptors | 1024×1536 | 4×4 | 16 | abuela apurada | pies |
+| velociraptor2 | npc/sprites-velociraptors-02 | 1536×1024 | 6×1 | 6 | abuela (variante) | pies |
+| bipCredit | items/01-saldo-bip | 1536×1024 | 3×1 | 3 | tarjeta "SALDO Bip" | centro |
+| bonusClock | items/sprite-reloj-bonus | 1024×1024 | 1×1 | 1 | cronómetro | centro |
+| headphones | items/sprite-audifonos | 1024×1024 | 1×1 | 1 | audífonos | centro |
+| fx | fx/hoja-fx-2d | 1024×1024 | 3×2 | 6 iconos | 0 polvo · 1 destello · 2 estrellas · 3 notas · 4 impacto · 5 cristal | centro |
+| barrierProp | props/sprite-barrera-obra | 1536×1024 | 1×1 | 1 | barrera de obra | pies |
+| busstopProp | props/sprite-paradero | 1536×1024 | 1×1 | 1 | paradero | pies |
+| platWide | props/sprite-plataforma-ancha | 1536×1024 | 1×1 | 1 | plataforma | superficie |
+| platMed | props/…-mediana | 1536×1024 | 1×1 | 1 | plataforma | superficie |
+| platSmall | props/…-pequeña | 1536×1024 | 1×1 | 1 | plataforma | superficie |
+| platRest | props/…-descanso | 1024×1024 | 1×1 | 1 | plataforma descanso | superficie |
+| turnstile | props/sprite-torniquete | 1536×1024 | 5×1 | 5 | cerrado(rojo)→abierto | pies |
+| validator | props/sprite-validador | 1024×1024 | 1×1 | 1 | validador Bip | pies |
+| micro | vehicles/sprites-micro | 1024×1536 | 2×4 | 2 (0 puerta cerrada, 1 abierta) | micro | pies |
+| metro | vehicles/sprites-metro | 1024×1536 | box explícito | 1 | tren 2 vagones | pies |
+| autos | vehicles/sprites-autos | 1024×1536 | 2×5 | 10 (1 fijo por instancia) | autos | pies |
+
+El notas-FX del cantante usa el ícono índice 3 (`S2C.fx.noteFrames`).
+La hoja `npc/sprites-cantantes.png` existe pero no se usa (variantes duplicadas).
 
 ## Debug
 

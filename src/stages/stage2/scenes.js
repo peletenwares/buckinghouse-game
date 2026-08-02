@@ -820,12 +820,8 @@ function makeBusStop(assets, sm) {
       drawBgSimple(ctx, assets.bgBusStop, S2_MANIFEST.bgBusStop, camX, worldW);
 
       // Paradero (prop)
-      var bsEntry = assets.busstopProp;
-      var bsDef   = S2_MANIFEST.busstopProp;
-      if (bsEntry && bsEntry.ok && bsDef) {
-        ctx.drawImage(bsEntry.img, 0, 0, bsDef.fw, bsDef.fh,
-          Math.round(600 - camX), gY - 110, 70, 110);
-      }
+      drawContentFrame(ctx, assets.busstopProp, S2_MANIFEST.busstopProp, 0,
+        620 - camX, gY, 150, false);
 
       platforms.forEach(function(pl) { pl.draw(ctx, camX); });
       items.forEach(function(it) { if (it.active) it.draw(ctx, camX); });

@@ -75,10 +75,41 @@
 
       var playerKeys = ['playerWalk','playerRun','playerIdle','playerJump','playerHurt','playerBip','playerWin','playerLose'];
       playerKeys.forEach(function(k) {
-        t('Player ' + k + ' definido',   !!S2_MANIFEST[k]);
-        t('Player ' + k + ' tiene grilla', S2_MANIFEST[k] && S2_MANIFEST[k].cols > 0);
-        t('Player ' + k + ' frame 512×512', S2_MANIFEST[k] && S2_MANIFEST[k].fw === 512 && S2_MANIFEST[k].fh === 512);
+        var d = S2_MANIFEST[k];
+        t('Player ' + k + ' definido',   !!d);
+        t('Player ' + k + ' tiene frames (content-box)',
+          d && Array.isArray(d.frames) && d.frames.length > 0);
+        t('Player ' + k + ' frames con {sx,sy,sw,sh}>0',
+          d && d.frames.every(function(f) {
+            return f.sw > 0 && f.sh > 0 &&
+                   f.sx >= 0 && f.sy >= 0 &&
+                   f.sx + f.sw <= d.w && f.sy + f.sh <= d.h;
+          }));
+        t('Player ' + k + ' refH>0 y anchor "feet"',
+          d && d.refH > 0 && d.anchor === 'feet');
       });
+
+      // El nº de frames coincide con el layout real observado en el QA visual.
+      var expectedFrames = {
+        playerWalk: 5, playerRun: 9, playerIdle: 4, playerJump: 5,
+        playerHurt: 4, playerBip: 4, playerWin: 4, playerLose: 4,
+        singerMale: 6, singerFemale: 6, pedestrian: 6, vendor: 4,
+        velociraptor: 16, velociraptor2: 6, bipCredit: 3, turnstile: 5,
+        fx: 6, micro: 2, autos: 10,
+      };
+      Object.keys(expectedFrames).forEach(function(k) {
+        t('Frames reales ' + k + ' = ' + expectedFrames[k],
+          S2_MANIFEST[k] && S2_MANIFEST[k].frames.length === expectedFrames[k],
+          'obtuvo ' + (S2_MANIFEST[k] ? S2_MANIFEST[k].frames.length : 'undef'));
+      });
+      t('Ningún frame recorta fuera de la hoja',
+        Object.keys(S2_MANIFEST).every(function(k) {
+          var d = S2_MANIFEST[k];
+          if (!d.frames) return true;
+          return d.frames.every(function(f) {
+            return f.sx + f.sw <= d.w && f.sy + f.sh <= d.h;
+          });
+        }));
 
       t('bipCredit definido',   !!S2_MANIFEST.bipCredit);
       t('bonusClock definido',  !!S2_MANIFEST.bonusClock);

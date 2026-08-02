@@ -15,15 +15,11 @@ const S2C = {
   coyoteTime:  0.10, // s tras dejar plataforma en que aún puede saltar
   jumpBuffer:  0.12, // s antes de aterrizar en que el salto se encola
 
-  // Jugador — render
+  // Jugador — render (content-box, x=centro, y=pies)
   player: {
-    fw: 512, fh: 512,      // tamaño de frame en spritesheet
-    renderH: 96,            // altura renderizada en canvas
-    get renderW() { return this.renderH; }, // frame cuadrado
-    hitW: 38,               // ancho del hitbox
-    hitH: 82,               // alto del hitbox
-    hitOX: 29,              // offset X desde esquina del frame al hitbox (centrado)
-    hitOY: 14,              // offset Y desde esquina del frame al hitbox
+    renderH: 150,           // altura visual del personaje en canvas
+    hitW: 46,               // ancho del hitbox (centrado en x)
+    hitH: 120,              // alto del hitbox (desde los pies hacia arriba)
     invulDuration: 1.5,     // s de invulnerabilidad tras daño
     stunDuration:  0.8,     // s de aturdimiento por vendedor
   },
@@ -57,12 +53,11 @@ const S2C = {
     get scaledH() { return S2C.H; },
   },
 
-  // NPC — vendedor
+  // NPC — vendedor (renderH = alto visual; hitbox relativo a x,y con y=groundY-renderH)
   vendor: {
-    fw: 512, fh: 512, cols: 2, rows: 3, totalFrames: 6,
-    renderH: 90,
-    hitW: 36, hitH: 78, hitOX: 27, hitOY: 12,
-    fps: 3,
+    renderH: 140,
+    hitW: 50, hitH: 120, hitOX: 45, hitOY: 20,
+    fps: 4,
     stunDuration: 0.8,
     timePenalty:  2,
     cooldown:     2.5,
@@ -70,19 +65,17 @@ const S2C = {
 
   // NPC — peatón lento
   pedestrian: {
-    fw: 512, fh: 512, cols: 3, rows: 2, totalFrames: 6,
-    renderH: 90,
-    hitW: 32, hitH: 76, hitOX: 29, hitOY: 14,
-    fps: 5,
+    renderH: 140,
+    hitW: 44, hitH: 120, hitOX: 48, hitOY: 20,
+    fps: 6,
     speed: 75,  // px/s (misma dirección que jugadora)
   },
 
-  // NPC — velociraptor
+  // NPC — velociraptor (abuela apurada)
   velociraptor: {
-    fw: 512, fh: 512, cols: 2, rows: 3, totalFrames: 6,
-    renderH: 78,
-    hitW: 52, hitH: 64, hitOX: 13, hitOY: 14,
-    fps: 10,
+    renderH: 122,
+    hitW: 70, hitH: 96, hitOX: 26, hitOY: 26,
+    fps: 12,
     speed:        220,   // px/s hacia la izquierda
     pushback:     150,   // px que retrocede el jugador
     stunDuration: 0.5,
@@ -93,42 +86,36 @@ const S2C = {
 
   // NPC — cantante
   singer: {
-    fw: 512, fh: 512, cols: 3, rows: 2, totalFrames: 6,
-    renderH: 90,
-    hitW: 34, hitH: 76, hitOX: 28, hitOY: 14,
+    renderH: 140,
     fps: 4,
     influenceW: 280,  // ancho de la zona de lentificación
     speedFactor: 0.60,
   },
 
-  // Ítems
+  // Ítems (draw ancla 'center' sobre el centro del hitbox)
   bipCredit: {
-    fw: 512, fh: 512, cols: 3, rows: 2, totalFrames: 6,
-    renderH: 44,
-    hitW: 36, hitH: 36, hitOX: 4, hitOY: 4,
+    renderH: 52,
+    hitW: 44, hitH: 40, hitOX: 4, hitOY: 4,
     fps: 4,
     required: 5,
   },
   bonusClock: {
-    fw: 512, fh: 512, cols: 2, rows: 2, totalFrames: 4,
-    renderH: 44,
-    hitW: 36, hitH: 36, hitOX: 4, hitOY: 4,
+    renderH: 54,
+    hitW: 44, hitH: 44, hitOX: 4, hitOY: 4,
     fps: 4,
     timeBonus: 5,
   },
   headphones: {
-    fw: 512, fh: 512, cols: 2, rows: 2, totalFrames: 4,
-    renderH: 40,
-    hitW: 32, hitH: 32, hitOX: 4, hitOY: 4,
+    renderH: 52,
+    hitW: 44, hitH: 40, hitOX: 4, hitOY: 4,
     fps: 3,
     duration: 8,
   },
 
-  // FX — notas musicales
+  // FX — icono de notas musicales (índice 3 en la hoja 3×2)
   fx: {
-    fw: 256, fh: 256, cols: 4, rows: 4,
-    noteFrames: [0, 1, 2, 3],   // índices de notas en la hoja
-    renderH: 28,
+    noteFrames: [3],
+    renderH: 34,
   },
 
   // Plataformas

@@ -8,8 +8,8 @@ function makeS2Player(startX, startY, assets) {
   var ANIM = {
     idle:  { key: 'playerIdle',  fps:  4, loop: true  },
     walk:  { key: 'playerWalk',  fps:  8, loop: true  },
-    run:   { key: 'playerRun',   fps: 10, loop: true  },
-    jump:  { key: 'playerJump',  fps:  8, loop: false },
+    run:   { key: 'playerRun',   fps: 12, loop: true  },
+    jump:  { key: 'playerJump',  fps: 10, loop: false },
     hurt:  { key: 'playerHurt',  fps:  8, loop: false },
     bip:   { key: 'playerBip',   fps:  6, loop: false },
     win:   { key: 'playerWin',   fps:  5, loop: true  },
@@ -49,15 +49,12 @@ function makeS2Player(startX, startY, assets) {
     hitW:  C.hitW,
     hitH:  C.hitH,
     renderH: C.renderH,
-    get renderW() { return C.renderH; },
 
     hitbox: function() {
-      // x,y son las coordenadas del pie izquierdo
-      var frameX = this.x - this.renderW / 2;
-      var frameY = this.y - this.renderH;
+      // x = centro horizontal, y = pies (base) de la jugadora
       return {
-        x: frameX + this.hitOX,
-        y: frameY + this.hitOY,
+        x: this.x - this.hitW / 2,
+        y: this.y - this.hitH,
         w: this.hitW,
         h: this.hitH,
       };
@@ -78,7 +75,7 @@ function makeS2Player(startX, startY, assets) {
       while (this.animTimer >= interval) {
         this.animTimer -= interval;
         var def = S2_MANIFEST[anim.key];
-        var total = def ? def.cols * def.rows : 1;
+        var total = (def && def.frames) ? def.frames.length : 1;
         if (anim.loop) {
           this.animFrame = (this.animFrame + 1) % total;
         } else {
@@ -181,7 +178,7 @@ function makeS2Player(startX, startY, assets) {
             var nowFeetY  = hb.y + hb.h;
             var inX = hb.x < pl.x + pl.w && hb.x + hb.w > pl.x;
             if (inX && prevFeetY <= pl.y + S2C.platform.h * 0.5 && nowFeetY >= pl.y) {
-              this.y = pl.y + (this.renderH - this.hitOY - this.hitH);
+              this.y = pl.y;  // pies sobre la superficie de la plataforma
               this.vy = 0;
               this.onGround  = true;
               this.onPlatform = pl;
@@ -230,24 +227,11 @@ function makeS2Player(startX, startY, assets) {
       var def   = S2_MANIFEST[anim.key];
       if (!entry || !entry.ok || !def) return;
 
-      var col = this.animFrame % def.cols;
-      var row = Math.floor(this.animFrame / def.cols);
-      var sx = col * def.fw;
-      var sy = row * def.fh;
-      var dw = this.renderW;
-      var dh = this.renderH;
-      var dx = Math.round(this.x - camX - dw / 2);
-      var dy = Math.round(this.y - dh);
-
       ctx.save();
       if (this.invulTimer > 0) ctx.globalAlpha = 0.5 + 0.5 * Math.sin(this.invulTimer * 20);
-      if (!this.facingRight) {
-        ctx.scale(-1, 1);
-        dx = -(dx + dw);
-        ctx.drawImage(entry.img, sx, sy, def.fw, def.fh, dx, dy, dw, dh);
-      } else {
-        ctx.drawImage(entry.img, sx, sy, def.fw, def.fh, dx, dy, dw, dh);
-      }
+      // x = centro, y = pies. Content-box escalado a renderH preservando aspecto.
+      drawContentFrame(ctx, entry, def, this.animFrame,
+        this.x - camX, this.y, this.renderH, !this.facingRight, 'feet');
       ctx.restore();
     },
 

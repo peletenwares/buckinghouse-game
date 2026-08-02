@@ -28,7 +28,7 @@
   <h1>Stage 2 Commute — Galería debug de assets</h1>
   <div class="badge">OFICIAL — assets/stage2-commute/</div>
   <p style="font-size:0.75rem;color:#666;margin-bottom:16px">
-    Grilla detectada: 512×512 por frame | Fondos: 2084×755 imagen única.
+    Content-box real por frame (recorte ajustado) | Fondos: 2084×755 imagen única.
     Para legacy (wake-up): <a href="debug-stage2-legacy-wake-up.html" style="color:#88f">debug-stage2-legacy-wake-up.html</a>
   </p>
 
@@ -48,13 +48,12 @@
     }
 
     function renderFrame(img, def, frame, thumbH) {
-      var col = frame % def.cols;
-      var row = Math.floor(frame / def.cols);
-      var sx = col * def.fw, sy = row * def.fh;
-      var scale = thumbH / def.fh;
-      var dw = Math.round(def.fw * scale), dh = thumbH;
+      // Renderiza el content-box real del frame (recorte ajustado).
+      var f = def.frames[frame];
+      var scale = thumbH / def.refH;
+      var dw = Math.max(1, Math.round(f.sw * scale)), dh = Math.max(1, Math.round(f.sh * scale));
       var c = makeCanvas(dw, dh);
-      c.getContext('2d').drawImage(img, sx, sy, def.fw, def.fh, 0, 0, dw, dh);
+      c.getContext('2d').drawImage(img, f.sx, f.sy, f.sw, f.sh, 0, 0, dw, dh);
       return c;
     }
 
@@ -96,22 +95,24 @@
         keys.forEach(function(key) {
           var def = S2_MANIFEST[key];
           var res = loaded[key];
+          var nFrames = (def && def.frames) ? def.frames.length : 0;
           var h3 = document.createElement('h3');
-          h3.textContent = key + ' — ' + (def ? def.src : '?') + (def && def.cols ? '  [' + def.cols + '×' + def.rows + ' = ' + (def.cols*def.rows) + ' frames de ' + def.fw + '×' + def.fh + ']' : '  [imagen única]');
+          h3.textContent = key + ' — ' + (def ? def.src : '?') +
+            (nFrames ? '  [' + def.cols + '×' + def.rows + ' grilla → ' + nFrames + ' frames (content-box), anchor ' + def.anchor + ']' : '  [imagen única]');
           gallery.appendChild(h3);
           if (!res || !res.ok) {
             var p = document.createElement('p'); p.style.color='#c44';
             p.textContent = '✗ No cargó — ' + (res ? res.src : '?');
             gallery.appendChild(p); return;
           }
-          if (def && def.cols) {
+          if (nFrames) {
             var grid = document.createElement('div'); grid.className = 'grid';
-            var total2 = def.cols * def.rows;
-            for (var f = 0; f < total2; f++) {
+            for (var f = 0; f < nFrames; f++) {
               var cell = document.createElement('div'); cell.className = 'cell';
               cell.appendChild(renderFrame(res.img, def, f, THUMB));
+              var fb = def.frames[f];
               var lbl = document.createElement('div'); lbl.className = 'lbl';
-              lbl.textContent = '#' + f + ' [' + (f % def.cols) + ',' + Math.floor(f / def.cols) + ']';
+              lbl.textContent = '#' + f + ' ' + fb.sw + '×' + fb.sh;
               cell.appendChild(lbl); grid.appendChild(cell);
             }
             gallery.appendChild(grid);

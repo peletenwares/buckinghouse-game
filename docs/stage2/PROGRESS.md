@@ -381,3 +381,63 @@ Ver src/stages/stage2/README.md para tabla completa.
 - `targets` frame 3 (peligro-rojo con triángulo) de la sprite sheet original no tiene contraparte en los nuevos PNG individuales. Pendiente de aclarar antes de Fase 5.
 - `hud` y `messages` son compuestos, no grilla. Coordenadas exactas de cada elemento TBD en Fase 3 o posterior.
 - `scene-sleeping.png` fue corregida de 1671×941 a 1672×941 (1 px añadido al borde derecho por artefacto de generación). Las otras tres escenas miden 1672×941 correctamente.
+
+---
+
+## QA visual y funcional (2026-08-02) — Commute
+
+QA completo ejecutado con servidor HTTP local (`python -m http.server 4173`) y
+navegador headless (Playwright/Chromium). Páginas probadas en navegador real:
+`stage2-dev.html?debug=1`, `index.html`, `debug-stage2.html`,
+`tests/stage2-commute.test.html`, `stage2-legacy-wake-up.html`.
+
+### Hallazgo crítico corregido
+El manifest asumía grillas uniformes **512×512** que **no existen**. Las hojas
+son arte IA con layout irregular (frames no cuadrados, columnas/filas variables,
+personajes que se tocan, filas con espaciado desigual). El render recortaba mal:
+mostraba medio personaje, dos personajes o celdas vacías.
+
+**Solución:** modelo de **content-box** por frame. `manifest.js` se regenera con
+un analizador de canal alfa (Pillow+numpy) que:
+1. detecta las **bandas de fila reales** de cada hoja (evita capturar la cabeza
+   de la fila vecina — bug observado en `vendor`, que mostraba una cabeza con
+   gorra roja de la fila 1 colada en el recorte de la fila 0);
+2. divide en columnas uniformes dentro de cada banda;
+3. recorta el content-box ajustado `{sx,sy,sw,sh}` por celda, descartando celdas
+   vacías.
+
+`entities.js` y `player.js` ahora usan `drawContentFrame()` que escala el
+content-box a una altura objetivo preservando aspecto y anclando en los pies
+(personajes/props) o el centro (ítems/FX). Mapeo definitivo por hoja en
+`src/stages/stage2/README.md`.
+
+### Resultados
+- Consola: **0 errores JS**, Network: **0 rutas 404**, todos los PNG cargan.
+- Ningún asset apunta a `assets/stage2/` (solo `assets/stage2-commute/`).
+- 10 estados de juego recorridos y capturados en `artifacts/stage2-qa/`:
+  INTRO, APARTMENT_RUN, MOVING_PLATFORM_CROSSING, SANTA_LUCIA_LANES, METRO_GATE,
+  METRO_TRANSITION, BUS_STOP (micro + paradero), BUS_TRANSITION, CLINIC_RUN,
+  COMPLETE (3★), FAILED.
+- Tests: **161/161 OK** (incluye validación de content-box y conteo real de
+  frames por hoja; recorte dentro de límites de la hoja).
+- Tamaños: escritorio 1920×1080, portátil 1366×768 y móvil horizontal 844×390 —
+  canvas escala y se centra sin desbordar; botones táctiles presentes.
+- Stage 1 (`index.html`) y Stage 2 legacy cargan sin errores (no regresión).
+- Sin `cuñada`; sin café/coffee como power-up (los únicos `café` son aserciones
+  de test que verifican su ausencia; "CAFÉ SANTA LUCÍA" es rótulo del fondo).
+
+### Ajustes de gameplay/visual
+- Frames reales por animación: player walk 5 / run 9 / idle 4 / jump 5 /
+  hurt·bip·win·lose 4; singers 6; pedestrian 6; vendor 4; velociraptor 16;
+  velociraptor2 6; bipCredit 3; turnstile 5; micro 2; autos 10; fx 6.
+- Player: hitbox re-anclado a `x`=centro, `y`=pies; `renderH` 150.
+- Torniquete corregido a 5 frames (cerrado→abierto); metro usa box explícito del
+  tren de 2 vagones; autos fijan una variante por instancia (no animan 10 autos).
+
+### Limitaciones reales pendientes
+- El carril superior de Santa Lucía (Y=308) queda alto contra el cielo del fondo;
+  es diseño de pistas estilo runner, funcional (los 3 carriles son alcanzables),
+  no un bug de sprite.
+- La franja de suelo (plataforma ancha estirada) en escenas planas es correcta y
+  soporta al personaje, pero estéticamente lee como calzada elevada sobre la
+  vereda del fondo; mejora cosmética futura opcional.
