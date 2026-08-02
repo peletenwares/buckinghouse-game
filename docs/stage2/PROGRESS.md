@@ -423,8 +423,8 @@ content-box a una altura objetivo preservando aspecto y anclando en los pies
 - Tamaños: escritorio 1920×1080, portátil 1366×768 y móvil horizontal 844×390 —
   canvas escala y se centra sin desbordar; botones táctiles presentes.
 - Stage 1 (`index.html`) y Stage 2 legacy cargan sin errores (no regresión).
-- Sin `cuñada`; sin café/coffee como power-up (los únicos `café` son aserciones
-  de test que verifican su ausencia; "CAFÉ SANTA LUCÍA" es rótulo del fondo).
+- Personaje = **Nico** (sin el término de parentesco prohibido); sin café/coffee
+  como power-up ("CAFÉ SANTA LUCÍA" es rótulo del fondo).
 
 ### Ajustes de gameplay/visual
 - Frames reales por animación: player walk 5 / run 9 / idle 4 / jump 5 /
@@ -489,5 +489,72 @@ Corrección profunda de suelo, carriles, fondos, colisiones y composición.
   0 errores JS. El personaje va por el suelo correcto en cada escena; las
   plataformas solo dominan el cruce; nadie camina por el cielo; fondos completos.
 - Tests: **185/185 OK**. Tamaños 1920×1080 / 1366×768 / 844×390 OK. Stage 1 y
-  legacy sin regresión. Sin `cuñada`; personaje = **Nico**; sin café/coffee power-up.
+  legacy sin regresión. Personaje = **Nico** (sin el término de parentesco
+  prohibido); sin café/coffee power-up.
 - Capturas en `artifacts/stage2-qa/` (gitignored).
+
+---
+
+## Cierre estructural — tres etapas oficiales (2026-08-02)
+
+Flujo final: **STAGE 1 (gatos) → STAGE 2 (trayecto de Nico) → STAGE 3
+(despertarlos) → GAME COMPLETE**.
+
+### 1. Etapa 2 — cronómetro de 60 s
+- `S2C.timer.start = 60`, `S2C.timer.max = 60`. El HUD inicia en `1:00`.
+- Eliminados **todos** los bonos de tiempo: `checkpointBonus` (bloque borrado),
+  abordar micro (+12), reloj bonus (+5), Bip extra (+2), validación metro/cruce.
+- Los checkpoints solo guardan progreso. El reloj bonus y el Bip extra ahora dan
+  **puntaje** (`bonusClock.score`, `bipCredit.bonusScore`), sin efecto temporal.
+- Techo duro: el cronómetro nunca supera 60 (incluida la tecla debug).
+- Rebalance de obstáculos (APARTMENT_RUN, CLINIC_RUN) y transiciones más cortas.
+  Un run correcto se completa en ~45–55 s (bot headless: 8/8 en 45.0–46.8 s).
+
+### 2. Nombre Nico
+- Uso consistente de **Nico** en UI/código/comentarios/tests. Cero menciones del
+  término de parentesco prohibido en la Etapa 2 (verificado por test de fuente).
+
+### 3. Etapa 3 — promoción del wake-up legacy
+- `git mv` de `src/stages/stage2-legacy-wake-up/{manifest,stage2}.js` →
+  `src/stages/stage3/{manifest,stage3}.js` y `assets/stage2/` → `assets/stage3/`
+  (historial preservado; sin duplicar).
+- Renombres sin colisión con la Etapa 2: `window.Stage3`, `STAGE3_MANIFEST`,
+  `loadStage3Assets`, canvas `s3canvas`, logs `[Stage3]`.
+- `Stage3.start({onComplete})` notifica al host al llegar la alarma a 100 %.
+- Nuevas páginas `stage3-dev.html`, `debug-stage3.html`. Las URLs legacy
+  `stage2-legacy-wake-up.html` / `debug-stage2-legacy-wake-up.html` redirigen a
+  las de la Etapa 3 mostrando el renombrado.
+
+### 4–7. Progresión, pantalla final y selector (index.html)
+- Etapa 1 completa → pantalla con botón «Continuar a Etapa 2».
+- Etapa 2 completa (clínica) → detiene la etapa, muestra resultados, botón
+  «Continuar a Etapa 3».
+- Etapa 3 completa → **GAME_COMPLETE** («¡Juego completado! / Gracias por jugar»)
+  con resumen. Botones: Jugar de nuevo (reinicia desde Etapa 1 limpiando
+  estados/timers/listeners), Seleccionar etapa, Volver al inicio (sin
+  `window.close`).
+- Selector de etapas con desbloqueo por progreso; `?debug=1` desbloquea todo.
+- Persistencia `localStorage['buckinghouse_progress'] =
+  {stage1Completed, stage2Completed, stage3Completed}`. La Etapa 2 se desbloquea
+  al completar la 1; la Etapa 3, al completar la 2.
+- `Stage2.start({onComplete})` añadido (notificación al final del loop para que
+  `Stage2.stop()` del host no reentre en el contexto).
+
+### 8. Pruebas
+- `tests/stage2-commute.test.html`: **199/199** (config de 60 s, sin bonos,
+  puntaje en lugar de tiempo, Nico, cero término prohibido).
+- `tests/stage2-completable.js` (Node): Etapa 2 completable en 60 s (8/8).
+- `tests/e2e-flow.js` (Playwright + Chrome): flujo completo **24/24** —
+  Stage 1 → 2 → 3 → GAME_COMPLETE, jugar de nuevo, páginas dev, cero errores y
+  cero 404.
+
+### Rutas
+`index.html` · `stage2-dev.html` · `stage3-dev.html` · `debug-stage2.html` ·
+`debug-stage3.html` (+ redirecciones legacy).
+
+### Limitaciones reales pendientes
+- La Etapa 3 no tiene teclas de debug propias; su completado en el E2E se ejercita
+  invocando el hook del host (`onStage3Complete`), no jugando la resortera.
+- El rebalance de 60 s se validó con un bot headless y con avance por debug en el
+  navegador; una verificación de completado 100 % “a mano” en la Etapa 2 depende
+  de la habilidad del jugador (diseño exigente pero posible).

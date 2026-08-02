@@ -109,12 +109,14 @@ Stage2.devStart() // Igual que start() pero standalone (sin Stage1)
 ## Configuración
 
 Todos los valores están en `config.js` bajo `S2C`:
-- `S2C.timer.start`: 150s
-- `S2C.bipCredit.required`: 5
-- `S2C.checkpointBonus.*`: bonos por escena
+- `S2C.timer.start`: **60s** (presupuesto TOTAL de la etapa; el HUD inicia en 1:00)
+- `S2C.timer.max`: 60s (techo duro; el cronómetro nunca lo supera)
+- `S2C.bipCredit.required`: 5 (objetivo del HUD; los extras dan `bonusScore`, no tiempo)
+- `S2C.bonusClock.score`: puntaje del reloj bonus (no afecta el cronómetro)
 - `S2C.lanes.y`: posiciones Y de los 3 carriles
-- `S2C.busStop.doorOpenTime`: 8s
-- etc.
+- `S2C.busStop.doorOpenTime`: 6s
+- **No hay bonos de tiempo**: no existe `checkpointBonus`; los checkpoints solo
+  guardan progreso. Ningún ítem ni escena aumenta el cronómetro.
 
 ## Spritesheets — mapeo real verificado (QA visual 2026-08-02)
 
@@ -182,24 +184,15 @@ Teclas de debug (solo con `?debug=1`):
 python -m http.server 5500
 ```
 
-- Nueva Stage 2: `http://localhost:5500/stage2-dev.html`
-- Nueva Stage 2 (debug): `http://localhost:5500/stage2-dev.html?debug=1`
+- Etapa 2 (dev): `http://localhost:5500/stage2-dev.html`
+- Etapa 2 (dev + teclas debug): `http://localhost:5500/stage2-dev.html?debug=1`
 - Galería de assets: `http://localhost:5500/debug-stage2.html`
-- Stage 1 → Stage 2: `http://localhost:5500/`
-- Stage 2 legacy (wake-up): `http://localhost:5500/stage2-legacy-wake-up.html`
-- Debug legacy: `http://localhost:5500/debug-stage2-legacy-wake-up.html`
+- Juego completo (Stage 1 → 2 → 3): `http://localhost:5500/`
 
-## Stage 2 anterior (wake-up — archivada)
+## Etapa 3 (antes wake-up)
 
-La Stage 2 experimental de despertar personas está archivada en:
-
-```
-src/stages/stage2-legacy-wake-up/
-  manifest.js  (STAGE2_MANIFEST + loadStage2Assets)
-  stage2.js    (juego de resortera con relojes)
-assets/stage2/ (intacta, no reutilizar)
-stage2-legacy-wake-up.html
-debug-stage2-legacy-wake-up.html
-```
-
-No forma parte del flujo productivo. Conservada íntegramente como referencia.
+La antigua Stage 2 experimental de despertar personas **fue promovida a la
+Etapa 3 oficial** (`src/stages/stage3/`, `window.Stage3`, `assets/stage3/`). Ver
+[`../stage3/README.md`](../stage3/README.md). Las URLs
+`stage2-legacy-wake-up.html` y `debug-stage2-legacy-wake-up.html` se conservan
+por compatibilidad y **redirigen** a las páginas de la Etapa 3.
