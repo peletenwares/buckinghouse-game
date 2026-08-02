@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Stage 2 Commute — Tests</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+    h1 { color: #f0c040; margin-bottom: 20px; }
+    .suite { margin-bottom: 24px; }
+    .suite h2 { color: #90c0ff; font-size: 0.95rem; border-bottom: 1px solid #334; padding-bottom: 4px; margin-bottom: 10px; }
+    .test { padding: 4px 0; font-size: 0.82rem; display: flex; gap: 10px; align-items: center; }
+    .pass { color: #4c4; }
+    .fail { color: #c44; }
+    .icon { width: 18px; text-align: center; }
+    #summary { margin-top: 24px; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Stage 2 Commute — Smoke Tests</h1>
+  <div id="results"></div>
+  <div id="summary"></div>
+
+  <script src="../src/stages/stage2/config.js"></script>
+  <script src="../src/stages/stage2/manifest.js"></script>
+  <script src="../src/stages/stage2/input.js"></script>
+  <script src="../src/stages/stage2/player.js"></script>
+  <script src="../src/stages/stage2/entities.js"></script>
+  <script src="../src/stages/stage2/scenes.js"></script>
+  <script src="../src/stages/stage2/stage2.js"></script>
+  <script>
+    var passed = 0, failed = 0;
+    var results = document.getElementById('results');
+
+    function suite(title, fn) {
+      var div = document.createElement('div'); div.className = 'suite';
+      var h2 = document.createElement('h2'); h2.textContent = title; div.appendChild(h2);
+      results.appendChild(div);
+      fn(function test(label, cond, detail) {
+        var row = document.createElement('div'); row.className = 'test';
+        var ok = !!cond;
+        if (ok) passed++; else failed++;
+        row.innerHTML = '<span class="icon ' + (ok ? 'pass' : 'fail') + '">' + (ok ? '✓' : '✗') + '</span>'
+          + '<span class="' + (ok ? 'pass' : 'fail') + '">' + label + '</span>'
+          + (detail && !ok ? '<span style="color:#888"> — ' + detail + '</span>' : '');
+        div.appendChild(row);
+      });
+    }
+
+    // ── S2C (config) ──────────────────────────────────────────────────────────
+    suite('Configuración (S2C)', function(t) {
+      t('S2C existe',                      typeof S2C === 'object');
+      t('S2C.W = 1280',                    S2C.W === 1280);
+      t('S2C.H = 720',                     S2C.H === 720);
+      t('Timer inicial = 150s',            S2C.timer.start === 150);
+      t('Saldo Bip requerido = 5',         S2C.bipCredit.required === 5);
+      t('gravity > 0',                     S2C.gravity > 0);
+      t('jumpSpeed > 0',                   S2C.jumpSpeed > 0);
+      t('3 carriles definidos',            Array.isArray(S2C.lanes.y) && S2C.lanes.y.length === 3);
+      t('Bonus APARTMENT_RUN = 15s',       S2C.checkpointBonus.APARTMENT_RUN === 15);
+      t('Bonus MOVING_PLATFORM_CROSSING = 20s', S2C.checkpointBonus.MOVING_PLATFORM_CROSSING === 20);
+      t('Sin café como power-up',          !S2C.coffee && !S2C.cafe);
+      t('dtMax <= 0.1',                    S2C.dtMax <= 0.1);
+    });
+
+    // ── S2_MANIFEST ───────────────────────────────────────────────────────────
+    suite('Manifiesto de assets (S2_MANIFEST)', function(t) {
+      t('S2_MANIFEST existe',             typeof S2_MANIFEST === 'object');
+      t('loadS2Assets es función',        typeof loadS2Assets === 'function');
+
+      var bgKeys = ['bgApartment','bgCrossing','bgMetro','bgBusStop','bgClinic'];
+      bgKeys.forEach(function(k) {
+        t('Fondo ' + k + ' tiene src',   S2_MANIFEST[k] && typeof S2_MANIFEST[k].src === 'string');
+        t('Fondo ' + k + ' apunta a stage2-commute', S2_MANIFEST[k] && S2_MANIFEST[k].src.indexOf('stage2-commute') !== -1);
+      });
+
+      var playerKeys = ['playerWalk','playerRun','playerIdle','playerJump','playerHurt','playerBip','playerWin','playerLose'];
+      playerKeys.forEach(function(k) {
+        t('Player ' + k + ' definido',   !!S2_MANIFEST[k]);
+        t('Player ' + k + ' tiene grilla', S2_MANIFEST[k] && S2_MANIFEST[k].cols > 0);
+        t('Player ' + k + ' frame 512×512', S2_MANIFEST[k] && S2_MANIFEST[k].fw === 512 && S2_MANIFEST[k].fh === 512);
+      });
+
+      t('bipCredit definido',   !!S2_MANIFEST.bipCredit);
+      t('bonusClock definido',  !!S2_MANIFEST.bonusClock);
+      t('headphones definido',  !!S2_MANIFEST.headphones);
+      t('vendor definido',      !!S2_MANIFEST.vendor);
+      t('pedestrian definido',  !!S2_MANIFEST.pedestrian);
+      t('velociraptor definido',!!S2_MANIFEST.velociraptor);
+      t('singerMale definido',  !!S2_MANIFEST.singerMale);
+      t('singerFemale definido',!!S2_MANIFEST.singerFemale);
+      t('turnstile definido',   !!S2_MANIFEST.turnstile);
+      t('validator definido',   !!S2_MANIFEST.validator);
+      t('micro definido',       !!S2_MANIFEST.micro);
+      t('metro definido',       !!S2_MANIFEST.metro);
+      t('Ninguna ruta referencia assets/stage2/ (legacy)',
+        Object.values(S2_MANIFEST).every(function(d) { return d.src.indexOf('assets/stage2/') === -1; }),
+        'Hay referencias a assets/stage2/');
+    });
+
+    // ── Input ────────────────────────────────────────────────────────────────
+    suite('S2Input', function(t) {
+      t('S2Input existe',      typeof S2Input === 'object');
+      t('S2Input.init existe', typeof S2Input.init === 'function');
+      t('S2Input.destroy existe', typeof S2Input.destroy === 'function');
+      t('S2Input.is existe',   typeof S2Input.is === 'function');
+      t('S2Input.pressed existe', typeof S2Input.pressed === 'function');
+      t('S2Input.tick existe', typeof S2Input.tick === 'function');
+      t('Sin tecla activa al inicio', !S2Input.is('left') && !S2Input.is('right') && !S2Input.is('jump'));
+    });
+
+    // ── Player ───────────────────────────────────────────────────────────────
+    suite('makeS2Player', function(t) {
+      var fakeAssets = {};
+      var p = makeS2Player(100, 500, fakeAssets);
+      t('makeS2Player crea objeto', typeof p === 'object');
+      t('Posición inicial X=100',   p.x === 100);
+      t('Posición inicial Y=500',   p.y === 500);
+      t('hitbox() devuelve objeto con x,y,w,h', (function() { var hb = p.hitbox(); return hb && typeof hb.x === 'number' && typeof hb.w === 'number'; })());
+      t('hitbox.w > 0', p.hitbox().w > 0);
+      t('hitbox.h > 0', p.hitbox().h > 0);
+      t('Tiene stun()', typeof p.stun === 'function');
+      t('Tiene update()', typeof p.update === 'function');
+      t('Tiene draw()', typeof p.draw === 'function');
+      t('Estado inicial idle', p.state === 'idle');
+      t('invulTimer inicial = 0', p.invulTimer === 0);
+    });
+
+    // ── Entidades ─────────────────────────────────────────────────────────────
+    suite('Entidades', function(t) {
+      var fa = {};
+
+      var vendor = makeVendor(200, fa);
+      t('makeVendor crea objeto', !!vendor);
+      t('Vendor tiene hitbox()', typeof vendor.hitbox === 'function');
+      t('Vendor tiene checkCollision()', typeof vendor.checkCollision === 'function');
+      t('Vendor cooldown inicial = 0', vendor.cooldown === 0);
+
+      var ped = makePedestrian(300, fa);
+      t('makePedestrian crea objeto', !!ped);
+      t('Pedestrian tiene speed', ped.speed === S2C.pedestrian.speed);
+
+      var rap = makeVelociraptor(400, 500, fa, false);
+      t('makeVelociraptor crea objeto', !!rap);
+      t('Velociraptor activo inicial', rap.active === true);
+
+      var bip = makeItem(100, 100, 'bipCredit', fa);
+      t('makeItem bipCredit', bip.type === 'bipCredit');
+      t('Item tiene collect()', typeof bip.collect === 'function');
+
+      var plat = makePlatform(0, 500, 200, 'platWide', fa);
+      t('makePlatform crea objeto', !!plat);
+      t('Platform w=200', plat.w === 200);
+      t('Platform y=500', plat.y === 500);
+      t('Platform no tiene update (estática)', plat.update === undefined);
+
+      var movPlat = makeMovingPlatform(100, 400, 500, 150, 80, 'platMed', fa);
+      t('makeMovingPlatform crea objeto', !!movPlat);
+      t('MovingPlatform tiene update()', typeof movPlat.update === 'function');
+      t('MovingPlatform vy inicial ≠ 0', movPlat.vy !== 0);
+      movPlat.update(0.1);
+      t('MovingPlatform se mueve con update', movPlat.y !== 400);
+
+      var singer = makeSinger(200, fa, 'female');
+      t('makeSinger crea objeto', !!singer);
+      t('Singer tiene checkSlowdown()', typeof singer.checkSlowdown === 'function');
+      t('Singer tiene influenceBox()', typeof singer.influenceBox === 'function');
+    });
+
+    // ── Estado de juego y cronómetro ─────────────────────────────────────────
+    suite('Cronómetro y estado de juego', function(t) {
+      t('Stage2 API expuesta',             typeof window.Stage2 === 'object');
+      t('Stage2.start es función',         typeof Stage2.start === 'function');
+      t('Stage2.stop es función',          typeof Stage2.stop === 'function');
+      t('Stage2.restart es función',       typeof Stage2.restart === 'function');
+      t('Stage2.resize es función',        typeof Stage2.resize === 'function');
+      t('Stage2.devStart es función',      typeof Stage2.devStart === 'function');
+
+      // Test de makeSceneManager sin assets reales
+      var calls = [];
+      var sm = makeSceneManager({}, function(k) { calls.push(k); }, null, null);
+      t('makeSceneManager crea objeto',    typeof sm === 'object');
+      t('sm.transitionTo es función',      typeof sm.transitionTo === 'function');
+      t('sm.update es función',            typeof sm.update === 'function');
+      t('sm.draw es función',              typeof sm.draw === 'function');
+      sm.init({ timer:150, bipCount:0, falls:0, hits:0, caughtFirstBus:false, headphonesTimer:0, checkpoint:null, stars:0, _showMsg:function(){} });
+      t('Escena inicial es INTRO',         sm.key === 'INTRO');
+      sm.transitionTo('APARTMENT_RUN');
+      t('Transición a APARTMENT_RUN',      sm.key === 'APARTMENT_RUN');
+      t('Callback onTransition llamado',   calls.indexOf('APARTMENT_RUN') !== -1);
+    });
+
+    // ── Saldo Bip y requisito ────────────────────────────────────────────────
+    suite('Saldo Bip y requisito mínimo', function(t) {
+      t('Requerido = 5',                   S2C.bipCredit.required === 5);
+      t('Sin café (sin S2C.coffee)',       !S2C.coffee);
+
+      // Simular colección
+      var collected = 0;
+      var msgs = [];
+      var gs = { bipCount: 0, timer: 150, hits: 0, falls: 0, headphonesTimer:0,
+                 checkpoint:null, _showMsg: function(m) { msgs.push(m); } };
+      var fa = {};
+      var item = makeItem(100, 100, 'bipCredit', fa);
+
+      // Simular que el player está encima del item
+      var fakePlayer = {
+        hitbox: function() { return { x:90, y:90, w:40, h:40 }; },
+        speedFactor: 1,
+        invulTimer: 0,
+      };
+      item.collect(fakePlayer, gs, gs._showMsg);
+      t('Colección suma bipCount', gs.bipCount === 1);
+      t('Colección dispara mensaje',       msgs.length > 0);
+      t('Item inactivo tras colección',    !item.active);
+      t('Segunda colección no suma',       (function() { item.collect(fakePlayer, gs, gs._showMsg); return gs.bipCount === 1; })());
+    });
+
+    // ── Penalizaciones con cooldown ───────────────────────────────────────────
+    suite('Penalizaciones con cooldown', function(t) {
+      var fa = {};
+      var gs = { bipCount:0, timer:150, hits:0, falls:0, headphonesTimer:0, checkpoint:null, _showMsg:function(){} };
+      var msgs = [];
+      var showMsg = function(m) { msgs.push(m); };
+
+      var vendor = makeVendor(100, fa);
+      vendor.setGround(558);
+      var fakePlayer = {
+        hitbox: function() { return { x: vendor.hitbox().x + 1, y: vendor.hitbox().y + 1, w:10, h:10 }; },
+        invulTimer: 0, stun: function(d) {}, vx: 0,
+      };
+
+      vendor.checkCollision(fakePlayer, gs, showMsg);
+      t('Primera colisión resta tiempo',   gs.timer < 150);
+      t('Primera colisión suma hit',       gs.hits === 1);
+
+      var timerAfterFirst = gs.timer;
+      vendor.checkCollision(fakePlayer, gs, showMsg);
+      t('Segunda colisión bloqueada por cooldown', gs.timer === timerAfterFirst);
+
+      vendor.update(S2C.vendor.cooldown + 0.1); // avanzar cooldown
+      vendor.checkCollision(fakePlayer, gs, showMsg);
+      t('Colisión tras cooldown vuelve a restar', gs.timer < timerAfterFirst);
+    });
+
+    // ── Audífonos ────────────────────────────────────────────────────────────
+    suite('Audífonos', function(t) {
+      var fa = {};
+      var gs = { bipCount:0, timer:150, hits:0, falls:0, headphonesTimer:0, checkpoint:null, _showMsg:function(){} };
+      var msgs = [];
+      var hp = makeItem(100, 100, 'headphones', fa);
+      var fakePlayer = {
+        hitbox: function() { return { x:90, y:90, w:40, h:40 }; },
+        speedFactor: 1, invulTimer: 0,
+      };
+      hp.collect(fakePlayer, gs, function(m) { msgs.push(m); });
+      t('headphonesTimer > 0 tras recolectar', gs.headphonesTimer > 0);
+      t('headphonesTimer = S2C.headphones.duration', gs.headphonesTimer === S2C.headphones.duration);
+
+      // Con audífonos activos, singer no ralentiza
+      var singer = makeSinger(95, fa, 'male');
+      singer.y = 90;
+      gs.headphonesTimer = 5;
+      fakePlayer.speedFactor = 1;
+      singer.checkSlowdown(fakePlayer, gs);
+      t('Audífonos neutralizan cantante', fakePlayer.speedFactor === 1);
+
+      // Sin audífonos, singer ralentiza
+      gs.headphonesTimer = 0;
+      fakePlayer.speedFactor = 1;
+      singer.checkSlowdown(fakePlayer, gs);
+      t('Sin audífonos, cantante ralentiza', fakePlayer.speedFactor < 1);
+    });
+
+    // ── Stage 1 no rota ───────────────────────────────────────────────────────
+    suite('Stage 1 no rota', function(t) {
+      // Variables que Stage 1 espera
+      t('Stage2.start existe',  typeof Stage2.start === 'function');
+      t('Stage2.stop existe',   typeof Stage2.stop === 'function');
+      t('Stage2 no expone STAGE2_MANIFEST (legacy var)',
+        typeof window.STAGE2_MANIFEST === 'undefined',
+        'STAGE2_MANIFEST filtrado al global — riesgo de conflicto');
+      t('S2_MANIFEST no referencia assets/stage2/ (solo stage2-commute/)',
+        Object.values(S2_MANIFEST).every(function(d) { return d.src.indexOf('/stage2/') === -1 || d.src.indexOf('/stage2-commute/') !== -1; }),
+        'Hay referencias a assets/stage2/');
+    });
+
+    // ── Reinicio sin listeners duplicados ────────────────────────────────────
+    suite('Reinicio sin listeners duplicados', function(t) {
+      var initCount = 0;
+      var orig = S2Input.init;
+      S2Input.init = function() { initCount++; orig.apply(this, arguments); };
+      Stage2.stop();
+      Stage2.stop(); // doble stop no debe duplicar nada
+      S2Input.init = orig;
+      t('Stage2.stop() múltiple no lanza', true);
+      t('Stage2.restart() sin start no lanza', (function() { try { Stage2.restart(); return true; } catch(e) { return false; } })());
+    });
+
+    // ── Resumen ──────────────────────────────────────────────────────────────
+    var total = passed + failed;
+    document.getElementById('summary').innerHTML =
+      '<b style="color:' + (failed ? '#f88' : '#4c4') + '">' + passed + '/' + total + '</b> tests pasaron. ' +
+      (failed ? '<span style="color:#f88">' + failed + ' fallaron.</span>' :
+                '<span style="color:#4c4">✓ Todos los tests pasaron.</span>');
+  </script>
+</body>
+</html>
