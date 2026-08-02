@@ -12,6 +12,10 @@ var _assets = null;
 var _sm     = null;  // SceneManager
 var _gs     = null;  // gameState
 
+// ── Hook de completado hacia el host (progresión → Etapa 3) ───────────────────
+var _onComplete       = null;   // callback opcional pasado por start({onComplete})
+var _completeNotified = false;  // asegura una sola notificación por partida
+
 // ── Modo debug ───────────────────────────────────────────────────────────────
 var _debug = (typeof location !== 'undefined' && location.search.indexOf('debug=1') !== -1);
 
@@ -139,12 +143,18 @@ function drawWinScreen(ctx, gs) {
     ctx.fillText('Alcanzaste la primera micro', S2C.W / 2, 440);
   }
 
-  ctx.font = '17px "Nunito",system-ui,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('Presiona Espacio para reiniciar', S2C.W / 2, 510);
-
-  if (S2Input.pressed('jump') || S2Input.pressed('right')) {
-    restartGame();
+  // Con host (progresión), el avance lo controla el botón DOM "Continuar a Etapa 3".
+  if (!_onComplete) {
+    ctx.font = '17px "Nunito",system-ui,sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText('Presiona Espacio para reiniciar', S2C.W / 2, 510);
+    if (S2Input.pressed('jump') || S2Input.pressed('right')) {
+      restartGame();
+    }
+  } else {
+    ctx.font = '17px "Nunito",system-ui,sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText('Etapa 2 completada', S2C.W / 2, 510);
   }
 }
 
@@ -316,11 +326,24 @@ function loop(timestamp) {
   }
   if (_gs && scKey === 'COMPLETE') drawWinScreen(_ctx, _gs);
   if (_gs && scKey === 'FAILED')   drawLoseScreen(_ctx, _gs);
+
   if (_debug && _dbgBounds && scKey !== 'COMPLETE' && scKey !== 'FAILED') drawSceneDebug(_ctx);
   if (_debug) drawDebugOverlay(_ctx, _gs);
 
   // Guardar estado del frame actual como "previo" para pressed() del próximo frame
   S2Input.tick();
+
+  // Notificar al host UNA sola vez al completar (progresión hacia la Etapa 3).
+  // Va al FINAL del loop: si el host llama Stage2.stop() en el callback, ya no
+  // queda dibujo pendiente que use el contexto destruido. gs.stars ya fue
+  // calculado por drawWinScreen y los stats se capturan antes de invocar.
+  if (scKey === 'COMPLETE' && _onComplete && !_completeNotified) {
+    _completeNotified = true;
+    _onComplete({
+      timer: _gs.timer, score: _gs.score, bipCount: _gs.bipCount,
+      stars: _gs.stars, hits: _gs.hits, falls: _gs.falls,
+    });
+  }
 }
 
 // ── Inicialización de estado ──────────────────────────────────────────────────
@@ -343,6 +366,7 @@ function freshGameState() {
 
 function restartGame() {
   _messages = [];
+  _completeNotified = false;
   _gs = freshGameState();
   _sm.init(_gs);
 }
@@ -413,7 +437,11 @@ function devStart() {
   });
 }
 
-function start() {
+function start(opts) {
+  // opts.onComplete(stats) se invoca UNA vez al llegar a la clínica (COMPLETE).
+  _onComplete = (opts && typeof opts.onComplete === 'function') ? opts.onComplete : null;
+  _completeNotified = false;
+
   if (_startPromise) return _startPromise;
   if (_started)      return Promise.resolve();
 
@@ -461,6 +489,8 @@ function stop() {
   _messages = [];
   _lastTime = null;
   _started  = false;
+  _onComplete = null;
+  _completeNotified = false;
 }
 
 function restart() {

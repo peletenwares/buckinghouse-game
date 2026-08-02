@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
@@ -142,6 +143,7 @@
         Celular: usa los botones en pantalla (juega en horizontal)
       </div>
       <button id="startBtn">Salir al patio</button>
+      <button id="toSelectBtn" style="background:linear-gradient(180deg,#a0c4ff,#5a8ad6);color:#0b1a33">Seleccionar etapa</button>
     </div>
 
     <div class="screen" id="overScreen">
@@ -152,8 +154,38 @@
 
     <div class="screen" id="winScreen">
       <h1>¡Los siete adentro! 🎉</h1>
+      <p style="color:#6bff9e;font-weight:800">Etapa 1 completada</p>
       <p id="winMsg"></p>
-      <button id="againBtn">Jugar de nuevo</button>
+      <button id="toStage2Btn">Continuar a Etapa 2</button>
+    </div>
+
+    <div class="screen" id="stage2DoneScreen">
+      <h1>¡Nico llegó a la clínica! 🏥</h1>
+      <p style="color:#6bff9e;font-weight:800">Etapa 2 completada</p>
+      <p id="stage2Stats"></p>
+      <button id="toStage3Btn">Continuar a Etapa 3</button>
+    </div>
+
+    <div class="screen" id="gameCompleteScreen">
+      <h1>¡Juego completado! 🎉</h1>
+      <p style="font-size:clamp(14px,2.3vw,22px);color:#ffd166;font-weight:800">Gracias por jugar</p>
+      <p id="gameSummary" style="white-space:pre-line;line-height:1.7"></p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+        <button id="playAgainBtn">Jugar de nuevo</button>
+        <button id="selectStageBtn" style="background:linear-gradient(180deg,#a0c4ff,#5a8ad6);color:#0b1a33">Seleccionar etapa</button>
+        <button id="homeBtn" style="background:linear-gradient(180deg,#d9d9d9,#a8a8a8);color:#1a1a1a">Volver al inicio</button>
+      </div>
+    </div>
+
+    <div class="screen" id="stageSelectScreen">
+      <h1>Selecciona una etapa</h1>
+      <div style="display:flex;flex-direction:column;gap:12px;align-items:center;margin-top:8px">
+        <button id="selStage1">Etapa 1 — Rescate de gatos</button>
+        <button id="selStage2">Etapa 2 — El trayecto</button>
+        <button id="selStage3">Etapa 3 — Despertarlos</button>
+      </div>
+      <p id="selectHint" style="margin-top:14px;opacity:.75;font-size:clamp(10px,1.6vw,15px)"></p>
+      <button id="selectBackBtn" style="background:linear-gradient(180deg,#d9d9d9,#a8a8a8);color:#1a1a1a">Volver al inicio</button>
     </div>
 
     <div id="rotate" class="armed">
@@ -312,9 +344,16 @@ const PHRASES = ["¡Besito a la mamá!","¿Dónde está mi amor?","¿Quién vien
    ESTADO
    ========================================================================== */
 let S = null, running = false, raf = null;
-let _s2TransitionTimer   = null;  // setTimeout handle de la transición a Etapa 2
+let _s2TransitionTimer   = null;  // (legacy) handle de transición; ya no se usa auto-timeout
 let _stage2Active        = false; // true cuando Etapa 2 está corriendo
 let _stage2Transitioning = false; // true mientras Stage2.start() está en curso
+let _stage3Active        = false; // true cuando Etapa 3 está corriendo
+
+// Persistencia de progreso entre etapas (desbloqueo del selector de etapas).
+// Estructura mínima documentada: { stage1Completed, stage2Completed, stage3Completed }.
+const PROGRESS_KEY  = 'buckinghouse_progress';
+// Debug: ?debug=1 desbloquea todas las etapas en el selector (no en producción).
+const _debugUnlock  = (typeof location !== 'undefined' && location.search.indexOf('debug=1') !== -1);
 
 function reset(){
   S = {
@@ -1564,21 +1603,56 @@ function syncCooldownUI(){
 const scStart=document.getElementById('startScreen'), scOver=document.getElementById('overScreen'),
       scWin=document.getElementById('winScreen');
 
+const scStage2Done   = document.getElementById('stage2DoneScreen');
+const scGameComplete = document.getElementById('gameCompleteScreen');
+const scSelect       = document.getElementById('stageSelectScreen');
+
+/* ---- Persistencia de progreso (desbloqueo de etapas) ------------------------
+   localStorage['buckinghouse_progress'] = {stage1Completed,stage2Completed,stage3Completed} */
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if(raw){ const p = JSON.parse(raw); return {
+      stage1Completed: !!p.stage1Completed,
+      stage2Completed: !!p.stage2Completed,
+      stage3Completed: !!p.stage3Completed }; }
+  }catch(e){ console.warn('[flow] progreso ilegible; se reinicia', e); }
+  return { stage1Completed:false, stage2Completed:false, stage3Completed:false };
+}
+function saveProgress(p){
+  try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }
+  catch(e){ console.warn('[flow] no se pudo guardar progreso', e); }
+}
+function markStageComplete(n){
+  const p = loadProgress();
+  p['stage'+n+'Completed'] = true;
+  saveProgress(p);
+  return p;
+}
+
+function hideAllScreens(){
+  [scStart, scOver, scWin, scStage2Done, scGameComplete, scSelect]
+    .forEach(s=>{ if(s) s.style.display='none'; });
+}
+// Detiene y limpia Etapas 2 y 3 (canvas, listeners, RAF) sin tocar la Etapa 1.
+function stopStages23(){
+  clearTimeout(_s2TransitionTimer); _s2TransitionTimer = null;
+  if(window.Stage2 && typeof Stage2.stop==='function' && (_stage2Active||_stage2Transitioning)) Stage2.stop();
+  if(window.Stage3 && typeof Stage3.stop==='function' && _stage3Active) Stage3.stop();
+  _stage2Active = false; _stage2Transitioning = false; _stage3Active = false;
+}
+
 let startPending = false;
 async function start(){
   if(startPending) return;
-  clearTimeout(_s2TransitionTimer); _s2TransitionTimer = null;
-  if(_stage2Transitioning || _stage2Active){
-    if(window.Stage2 && typeof Stage2.stop === 'function') Stage2.stop();
-    _stage2Transitioning = false;
-    _stage2Active        = false;
-  }
+  stopStages23();
+  hideAllScreens();
   cv.style.display = '';
   startPending = true;
   await Promise.all([nataliaReady, catsReady, alexisReady]);
   startPending = false;
   reset(); running = true; S.phase="play";
-  scStart.style.display="none"; scOver.style.display="none"; scWin.style.display="none";
+  hideAllScreens();
   cancelAnimationFrame(raf); loop();
 }
 function gameOver(){
@@ -1592,32 +1666,120 @@ function win(){
   document.getElementById('winMsg').textContent =
     "Sultán, Pipi, Mía, Chichi, Vito, Luna y Blanqui están adentro. Alimento juntado: " +
     S.food + " · Corazones restantes: " + S.nat.hearts;
-  scWin.style.display="flex";
-  _s2TransitionTimer = setTimeout(launchStage2, 3000);
+  markStageComplete(1);
+  // Pantalla de fin de Etapa 1 con botón "Continuar a Etapa 2" (sin auto-timeout).
+  hideAllScreens(); scWin.style.display="flex";
 }
-function launchStage2(){
-  if(!window.Stage2 || typeof Stage2.start !== 'function'){
-    console.error('[Stage2] módulo no disponible — transición cancelada');
-    return;
-  }
-  if(S.phase !== 'win' || _stage2Active || _stage2Transitioning) return;
-  _s2TransitionTimer   = null;
+
+/* ============================ PROGRESIÓN DE ETAPAS ==========================
+   STAGE 1 (gatos) → STAGE 2 (trayecto de Nico) → STAGE 3 (despertarlos) → FIN */
+
+// Etapa 1 → Etapa 2 (botón "Continuar a Etapa 2").
+function goToStage2(){
+  if(!window.Stage2 || typeof Stage2.start!=='function'){ console.error('[flow] Etapa 2 no disponible'); return; }
+  if(_stage2Active || _stage2Transitioning) return;
+  _stage3Active = false;
   _stage2Transitioning = true;
-  Stage2.start().then(function(){
-    if(S.phase !== 'win'){
-      _stage2Transitioning = false;
-      return;
-    }
+  Stage2.start({ onComplete: onStage2Complete }).then(function(){
     _stage2Transitioning = false;
     _stage2Active        = true;
-    scWin.style.display  = 'none';
-    cv.style.display     = 'none';
+    hideAllScreens();
+    cv.style.display = 'none';
   }).catch(function(err){
     _stage2Transitioning = false;
-    if(!err || err.code !== 'STAGE2_START_CANCELLED'){
-      console.error('[Stage2] fallo al iniciar — pantalla de victoria conservada:', err);
-    }
+    if(!err || err.code !== 'STAGE2_START_CANCELLED')
+      console.error('[flow] Etapa 2 falló al iniciar:', err);
   });
+}
+
+// Etapa 2 completada (llegó a la clínica). Se difiere para no reentrar en su loop.
+function onStage2Complete(stats){
+  markStageComplete(2);
+  setTimeout(function(){
+    if(window.Stage2 && typeof Stage2.stop==='function') Stage2.stop();
+    _stage2Active = false; _stage2Transitioning = false;
+    cv.style.display = 'none';
+    var t  = Math.max(0, (stats && stats.timer) || 0);
+    var mm = Math.floor(t/60), ss = Math.floor(t%60).toString().padStart(2,'0');
+    var st = (stats && stats.stars) || 0;
+    document.getElementById('stage2Stats').textContent =
+      '★'.repeat(st) + '☆'.repeat(3-st) +
+      ' · Tiempo restante ' + mm + ':' + ss +
+      ' · Puntaje ' + ((stats && stats.score) || 0);
+    hideAllScreens(); scStage2Done.style.display='flex';
+  }, 0);
+}
+
+// Etapa 2 → Etapa 3 (botón "Continuar a Etapa 3").
+function goToStage3(){
+  if(!window.Stage3 || typeof Stage3.start!=='function'){ console.error('[flow] Etapa 3 no disponible'); return; }
+  if(_stage3Active) return;
+  // Asegura que la Etapa 2 quedó detenida.
+  if(window.Stage2 && typeof Stage2.stop==='function' && (_stage2Active||_stage2Transitioning)) Stage2.stop();
+  _stage2Active = false; _stage2Transitioning = false;
+  Stage3.start({ onComplete: onStage3Complete }).then(function(){
+    _stage3Active = true;
+    hideAllScreens();
+    cv.style.display = 'none';
+  }).catch(function(err){
+    if(!err || err.code !== 'STAGE3_START_CANCELLED')
+      console.error('[flow] Etapa 3 falló al iniciar:', err);
+  });
+}
+
+// Etapa 3 completada (los despertó). Se difiere para no reentrar en su loop.
+function onStage3Complete(stats){
+  markStageComplete(3);
+  setTimeout(function(){
+    if(window.Stage3 && typeof Stage3.stop==='function') Stage3.stop();
+    _stage3Active = false;
+    cv.style.display = 'none';
+    showGameComplete(stats);
+  }, 700);  // breve pausa mostrando el desenlace de la Etapa 3 en su canvas
+}
+
+// Pantalla final del juego.
+function showGameComplete(stats){
+  var p = loadProgress();
+  var lines = [
+    (p.stage1Completed ? '✓' : '·') + ' Etapa 1 — Rescate de gatos',
+    (p.stage2Completed ? '✓' : '·') + ' Etapa 2 — El trayecto de Nico',
+    (p.stage3Completed ? '✓' : '·') + ' Etapa 3 — Despertarlos',
+  ];
+  if(stats && typeof stats.score === 'number') lines.push('Puntaje Etapa 3: ' + stats.score);
+  document.getElementById('gameSummary').textContent = lines.join('\n');
+  hideAllScreens(); scGameComplete.style.display='flex';
+}
+
+// "Jugar de nuevo": reinicia por completo desde la Etapa 1 (limpia estados,
+// timers, listeners y animaciones de las etapas 2/3). No cierra la pestaña.
+function playAgain(){ start(); }
+
+// Volver al inicio (menú principal).
+function goHome(){
+  stopStages23();
+  running = false; cancelAnimationFrame(raf);
+  if(S) S.phase = 'menu';
+  cv.style.display = '';
+  hideAllScreens(); scStart.style.display='flex';
+}
+
+// Selector de etapas con desbloqueo por progreso (o ?debug=1).
+function showStageSelect(){
+  stopStages23();
+  running = false; cancelAnimationFrame(raf);
+  cv.style.display = '';
+  var p = loadProgress();
+  var b2 = document.getElementById('selStage2');
+  var b3 = document.getElementById('selStage3');
+  var unlock2 = _debugUnlock || p.stage1Completed;
+  var unlock3 = _debugUnlock || p.stage2Completed;
+  b2.disabled = !unlock2; b2.style.opacity = unlock2 ? '1' : '0.45';
+  b3.disabled = !unlock3; b3.style.opacity = unlock3 ? '1' : '0.45';
+  document.getElementById('selectHint').textContent = _debugUnlock
+    ? 'Modo debug: todas las etapas desbloqueadas.'
+    : 'La Etapa 2 se desbloquea al completar la 1; la Etapa 3, al completar la 2.';
+  hideAllScreens(); scSelect.style.display='flex';
 }
 const rot = document.getElementById('rotate');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -1636,18 +1798,24 @@ async function enterFullscreen(){
 }
 
 document.getElementById('rotateOk').onclick = ()=> rot.classList.remove('armed');
-document.getElementById('startBtn').onclick = async ()=>{
-  await enterFullscreen();
-  start();
-};
-document.getElementById('retryBtn').onclick = async ()=>{
-  await enterFullscreen();
-  start();
-};
-document.getElementById('againBtn').onclick = async ()=>{
-  await enterFullscreen();
-  start();
-};
+document.getElementById('startBtn').onclick = async ()=>{ await enterFullscreen(); start(); };
+document.getElementById('retryBtn').onclick = async ()=>{ await enterFullscreen(); start(); };
+document.getElementById('toSelectBtn').onclick = ()=> showStageSelect();
+
+// Progresión
+document.getElementById('toStage2Btn').onclick = async ()=>{ await enterFullscreen(); goToStage2(); };
+document.getElementById('toStage3Btn').onclick = async ()=>{ await enterFullscreen(); goToStage3(); };
+
+// Pantalla final
+document.getElementById('playAgainBtn').onclick    = async ()=>{ await enterFullscreen(); playAgain(); };
+document.getElementById('selectStageBtn').onclick   = ()=> showStageSelect();
+document.getElementById('homeBtn').onclick          = ()=> goHome();
+
+// Selector de etapas
+document.getElementById('selStage1').onclick = async ()=>{ await enterFullscreen(); start(); };
+document.getElementById('selStage2').onclick = async ()=>{ await enterFullscreen(); goToStage2(); };
+document.getElementById('selStage3').onclick = async ()=>{ await enterFullscreen(); goToStage3(); };
+document.getElementById('selectBackBtn').onclick = ()=> goHome();
 fullscreenBtn.onclick = async ()=>{
   await enterFullscreen();
 };
@@ -1666,5 +1834,8 @@ reset(); resizeCanvas(); draw();
 <script src="src/stages/stage2/entities.js"></script>
 <script src="src/stages/stage2/scenes.js"></script>
 <script src="src/stages/stage2/stage2.js"></script>
+<!-- Etapa 3 — Despertarlos (antes wake-up legacy) -->
+<script src="src/stages/stage3/manifest.js"></script>
+<script src="src/stages/stage3/stage3.js"></script>
 </body>
 </html>
