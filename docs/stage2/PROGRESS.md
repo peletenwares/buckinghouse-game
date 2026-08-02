@@ -306,9 +306,65 @@ Fase 7 completada — Integración con Etapa 1 implementada. Pendiente: validaci
 - `stage2-dev.html` no fue modificado; sigue funcionando standalone.
 - Validación visual pendiente en `http://localhost:5500/`.
 
-## Pendiente
+## Pendiente (Stage 2 Wake-Up — archivada)
 
-- Ninguna fase pendiente. Etapa 2 completamente integrada.
+- Ninguna fase adicional para wake-up. Completamente integrada y archivada.
+
+---
+
+# Stage 2 Commute — Nueva etapa oficial
+
+## Estado
+
+Implementación completa en `feature/stage-2-commute`.
+
+## Escenas implementadas
+
+| Escena | Estado | Mecánica |
+|--------|--------|---------|
+| INTRO | ✓ | Pantalla de título, auto-skip |
+| APARTMENT_RUN | ✓ | Runner, saldo Bip ≥5, NPCs |
+| MOVING_PLATFORM_CROSSING | ✓ | Plataformas móviles, caída -5s |
+| SANTA_LUCIA_LANES | ✓ | 3 carriles, cantantes, audífonos |
+| METRO_GATE | ✓ | Cutscene validación Bip + torniquete |
+| METRO_TRANSITION | ✓ | Cinemática ~3.5s, saltable |
+| BUS_STOP | ✓ | Micro con temporizador de puerta |
+| BUS_TRANSITION | ✓ | Cinemática ~3s |
+| CLINIC_RUN | ✓ | Runner final, entrada clínica |
+| COMPLETE | ✓ | Pantalla de victoria con estrellas |
+| FAILED | ✓ | Pantalla de derrota |
+
+## Archivos creados
+
+```
+src/stages/stage2/config.js
+src/stages/stage2/manifest.js      (reemplaza el de wake-up)
+src/stages/stage2/input.js
+src/stages/stage2/player.js
+src/stages/stage2/entities.js
+src/stages/stage2/scenes.js
+src/stages/stage2/stage2.js        (reemplaza el de wake-up)
+src/stages/stage2/README.md
+src/stages/stage2-legacy-wake-up/manifest.js
+src/stages/stage2-legacy-wake-up/stage2.js
+stage2-dev.html                    (actualizado para commute)
+stage2-legacy-wake-up.html         (nuevo — acceso legacy)
+debug-stage2.html                  (actualizado para commute)
+debug-stage2-legacy-wake-up.html   (nuevo — galería legacy)
+tests/stage2-commute.test.html
+```
+
+## Archivos modificados
+
+```
+index.html           (script tags actualizados)
+docs/stage2/PROGRESS.md
+```
+
+## Dimensiones PNG verificadas
+
+Todos los fondos: 2084×755. Grilla estándar: 512×512 por frame.
+Ver src/stages/stage2/README.md para tabla completa.
 
 ## Decisiones
 

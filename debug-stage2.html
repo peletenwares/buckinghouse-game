@@ -2,230 +2,138 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Stage 2 — Galería debug de assets</title>
+  <title>Stage 2 Commute — Galería debug de assets</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 24px; }
-    h1 { color: #f0c040; margin-bottom: 20px; font-size: 1.2rem; letter-spacing: 0.05em; }
-    h2 { color: #90c0ff; font-size: 0.95rem; margin: 28px 0 10px; border-bottom: 1px solid #334; padding-bottom: 4px; }
-    h3 { color: #ccc; font-size: 0.85rem; margin: 18px 0 6px; }
-
-    /* Load status panel */
+    h1 { color: #f0c040; margin-bottom: 6px; font-size: 1.1rem; }
+    .badge { display:inline-block; background:#2a5; color:#fff; padding:2px 10px;
+             border-radius:4px; font-size:0.78rem; margin-bottom:20px; }
+    h2 { color: #90c0ff; font-size: 0.95rem; margin: 28px 0 10px;
+         border-bottom: 1px solid #334; padding-bottom: 4px; }
+    h3 { color: #ccc; font-size: 0.82rem; margin: 16px 0 5px; }
     #status { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-    .asset-status { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; border: 1px solid #444; }
-    .asset-status.ok  { border-color: #4c4; color: #4c4; }
-    .asset-status.err { border-color: #c44; color: #c44; }
-
-    /* Frame grid */
-    .frame-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
-    .frame-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .frame-cell canvas { border: 1px solid #444; background: repeating-conic-gradient(#2a2a3a 0% 25%, #1a1a2e 0% 50%) 0 0 / 12px 12px; }
-    .frame-label { font-size: 0.65rem; color: #888; text-align: center; line-height: 1.3; }
-
-    /* Composite UI thumbnails */
-    .composite-wrap { margin-top: 6px; }
-    .composite-wrap canvas { border: 1px solid #446; max-width: 100%; display: block; }
-    .composite-note { font-size: 0.72rem; color: #f0c040; margin-top: 4px; }
-
-    /* Summary */
-    #summary { margin-top: 28px; font-size: 0.8rem; color: #aaa; }
-    #summary b { color: #e0e0e0; }
+    .as { padding: 3px 9px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #444; }
+    .as.ok  { border-color: #4c4; color: #4c4; }
+    .as.err { border-color: #c44; color: #c44; }
+    .grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+    .cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .cell canvas { border: 1px solid #444; background: repeating-conic-gradient(#2a2a3a 0% 25%, #1a1a2e 0% 50%) 0 0/12px 12px; }
+    .lbl { font-size: 0.62rem; color: #888; text-align: center; }
+    .full-wrap canvas { border: 1px solid #446; max-width: 100%; display: block; }
+    #summary { margin-top: 24px; font-size: 0.8rem; color: #aaa; }
   </style>
 </head>
 <body>
-  <h1>Stage 2 — Galería debug de assets</h1>
+  <h1>Stage 2 Commute — Galería debug de assets</h1>
+  <div class="badge">OFICIAL — assets/stage2-commute/</div>
+  <p style="font-size:0.75rem;color:#666;margin-bottom:16px">
+    Grilla detectada: 512×512 por frame | Fondos: 2084×755 imagen única.
+    Para legacy (wake-up): <a href="debug-stage2-legacy-wake-up.html" style="color:#88f">debug-stage2-legacy-wake-up.html</a>
+  </p>
 
   <h2>Estado de carga</h2>
-  <div id="status">Cargando...</div>
-
+  <div id="status">Cargando…</div>
   <div id="gallery"></div>
-
   <div id="summary"></div>
 
+  <script src="src/stages/stage2/config.js"></script>
   <script src="src/stages/stage2/manifest.js"></script>
   <script>
-    const THUMB_W = 180;
-    const THUMB_H = 100;
-    const COMPOSITE_MAX_W = 640;
+    var THUMB = 100, FULL_W = 520;
 
     function makeCanvas(w, h) {
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h; return c;
+    }
+
+    function renderFrame(img, def, frame, thumbH) {
+      var col = frame % def.cols;
+      var row = Math.floor(frame / def.cols);
+      var sx = col * def.fw, sy = row * def.fh;
+      var scale = thumbH / def.fh;
+      var dw = Math.round(def.fw * scale), dh = thumbH;
+      var c = makeCanvas(dw, dh);
+      c.getContext('2d').drawImage(img, sx, sy, def.fw, def.fh, 0, 0, dw, dh);
       return c;
     }
 
-    function renderFrame(img, col, row, cellW, cellH) {
-      const scale = Math.min(THUMB_W / cellW, THUMB_H / cellH);
-      const dw = Math.round(cellW * scale);
-      const dh = Math.round(cellH * scale);
-      const c = makeCanvas(dw, dh);
-      c.getContext('2d').drawImage(img, col * cellW, row * cellH, cellW, cellH, 0, 0, dw, dh);
-      return c;
-    }
-
-    function renderComposite(img, def) {
-      const scale = Math.min(COMPOSITE_MAX_W / def.w, 1);
-      const dw = Math.round(def.w * scale);
-      const dh = Math.round(def.h * scale);
-      const c = makeCanvas(dw, dh);
+    function renderFull(img, def) {
+      var scale = Math.min(FULL_W / def.w, 1);
+      var dw = Math.round(def.w * scale), dh = Math.round(def.h * scale);
+      var c = makeCanvas(dw, dh);
       c.getContext('2d').drawImage(img, 0, 0, def.w, def.h, 0, 0, dw, dh);
       return c;
     }
 
-    function buildStatusPanel(loaded) {
-      const panel = document.getElementById('status');
+    loadS2Assets().then(function(loaded) {
+      var panel = document.getElementById('status');
       panel.innerHTML = '';
-      let okCount = 0;
-      for (const [key, res] of Object.entries(loaded)) {
-        const def = STAGE2_MANIFEST[key];
-        const el = document.createElement('div');
-        el.className = 'asset-status ' + (res.ok ? 'ok' : 'err');
-        el.title = def.src;
+      var okCount = 0, total = Object.keys(S2_MANIFEST).length;
+
+      Object.keys(loaded).forEach(function(key) {
+        var res = loaded[key];
+        var el = document.createElement('div');
+        el.className = 'as ' + (res.ok ? 'ok' : 'err');
+        el.title = res.src;
         el.textContent = (res.ok ? '✓ ' : '✗ ') + key;
         panel.appendChild(el);
         if (res.ok) okCount++;
-      }
-      return okCount;
-    }
+      });
 
-    function buildGallery(loaded) {
-      const gallery = document.getElementById('gallery');
-      gallery.innerHTML = '';
+      var gallery = document.getElementById('gallery');
 
-      const gridKeys = Object.keys(STAGE2_MANIFEST).filter(k => STAGE2_MANIFEST[k].cols);
-      const compositeKeys = ['hud', 'messages'];
-      const bgKeys = ['bgEmpty', 'bgRef'];
+      // Grupos
+      var bgKeys     = ['bgApartment','bgCrossing','bgMetro','bgBusStop','bgClinic'];
+      var playerKeys = ['playerWalk','playerRun','playerIdle','playerJump','playerHurt','playerBip','playerWin','playerLose'];
+      var npcKeys    = ['vendor','pedestrian','velociraptor','velociraptor2','singerMale','singerFemale'];
+      var itemKeys   = ['bipCredit','bonusClock','headphones'];
+      var propKeys   = ['platWide','platMed','platSmall','platRest','barrierProp','busstopProp','turnstile','validator'];
+      var vehKeys    = ['autos','metro','micro'];
 
-      // --- Grid-based sprites ---
-      const h2grid = document.createElement('h2');
-      h2grid.textContent = 'Sprites con cuadrícula';
-      gallery.appendChild(h2grid);
-
-      for (const key of gridKeys) {
-        const def = STAGE2_MANIFEST[key];
-        const res = loaded[key];
-
-        const h3 = document.createElement('h3');
-        h3.textContent = `${key}  —  ${def.src}  [${def.w}×${def.h}]  ${def.cols}×${def.rows}  cellW=${def.cellW} cellH=${def.cellH}`;
-        gallery.appendChild(h3);
-
-        if (!res.ok) {
-          const err = document.createElement('p');
-          err.style.color = '#c44';
-          err.textContent = '✗ No cargó — revisa la ruta.';
-          gallery.appendChild(err);
-          continue;
-        }
-
-        const grid = document.createElement('div');
-        grid.className = 'frame-grid';
-
-        for (let row = 0; row < def.rows; row++) {
-          for (let col = 0; col < def.cols; col++) {
-            const cell = document.createElement('div');
-            cell.className = 'frame-cell';
-
-            const canvas = renderFrame(res.img, col, row, def.cellW, def.cellH);
-            cell.appendChild(canvas);
-
-            const label = document.createElement('div');
-            label.className = 'frame-label';
-            label.textContent = `[${row},${col}]\n${Math.round(col * def.cellW)},${Math.round(row * def.cellH)}`;
-            cell.appendChild(label);
-
-            grid.appendChild(cell);
+      function section(title, keys) {
+        var h2 = document.createElement('h2'); h2.textContent = title; gallery.appendChild(h2);
+        keys.forEach(function(key) {
+          var def = S2_MANIFEST[key];
+          var res = loaded[key];
+          var h3 = document.createElement('h3');
+          h3.textContent = key + ' — ' + (def ? def.src : '?') + (def && def.cols ? '  [' + def.cols + '×' + def.rows + ' = ' + (def.cols*def.rows) + ' frames de ' + def.fw + '×' + def.fh + ']' : '  [imagen única]');
+          gallery.appendChild(h3);
+          if (!res || !res.ok) {
+            var p = document.createElement('p'); p.style.color='#c44';
+            p.textContent = '✗ No cargó — ' + (res ? res.src : '?');
+            gallery.appendChild(p); return;
           }
-        }
-
-        gallery.appendChild(grid);
+          if (def && def.cols) {
+            var grid = document.createElement('div'); grid.className = 'grid';
+            var total2 = def.cols * def.rows;
+            for (var f = 0; f < total2; f++) {
+              var cell = document.createElement('div'); cell.className = 'cell';
+              cell.appendChild(renderFrame(res.img, def, f, THUMB));
+              var lbl = document.createElement('div'); lbl.className = 'lbl';
+              lbl.textContent = '#' + f + ' [' + (f % def.cols) + ',' + Math.floor(f / def.cols) + ']';
+              cell.appendChild(lbl); grid.appendChild(cell);
+            }
+            gallery.appendChild(grid);
+          } else {
+            var wrap = document.createElement('div'); wrap.className = 'full-wrap';
+            wrap.appendChild(renderFull(res.img, def)); gallery.appendChild(wrap);
+          }
+        });
       }
 
-      // --- Composite UI ---
-      const h2ui = document.createElement('h2');
-      h2ui.textContent = 'UI compuesta (referencia — coordenadas TBD en Fase 2)';
-      gallery.appendChild(h2ui);
+      section('Fondos (imagen única 2084×755)', bgKeys);
+      section('Jugadora — 8 hojas de animación', playerKeys);
+      section('NPCs', npcKeys);
+      section('Ítems', itemKeys);
+      section('Props', propKeys);
+      section('Vehículos', vehKeys);
+      section('FX', ['fx']);
 
-      for (const key of compositeKeys) {
-        const def = STAGE2_MANIFEST[key];
-        const res = loaded[key];
-
-        const h3 = document.createElement('h3');
-        h3.textContent = `${key}  —  ${def.src}  [${def.w}×${def.h}]`;
-        gallery.appendChild(h3);
-
-        if (!res.ok) {
-          const err = document.createElement('p');
-          err.style.color = '#c44';
-          err.textContent = '✗ No cargó — revisa la ruta.';
-          gallery.appendChild(err);
-          continue;
-        }
-
-        const wrap = document.createElement('div');
-        wrap.className = 'composite-wrap';
-        wrap.appendChild(renderComposite(res.img, def));
-
-        const note = document.createElement('div');
-        note.className = 'composite-note';
-        note.textContent = 'Referencia de inspección — nunca renderizar completo en gameplay.';
-        wrap.appendChild(note);
-
-        gallery.appendChild(wrap);
-      }
-
-      // --- Fondos ---
-      const h2bg = document.createElement('h2');
-      h2bg.textContent = 'Fondos';
-      gallery.appendChild(h2bg);
-
-      for (const key of bgKeys) {
-        const def = STAGE2_MANIFEST[key];
-        const res = loaded[key];
-
-        const h3 = document.createElement('h3');
-        h3.textContent = `${key}  —  ${def.src}  [${def.w}×${def.h}]` + (key === 'bgRef' ? '  ⚠ REFERENCIA — no usar en juego' : '');
-        h3.style.color = key === 'bgRef' ? '#f0c040' : '#ccc';
-        gallery.appendChild(h3);
-
-        if (!res.ok) {
-          const err = document.createElement('p');
-          err.style.color = '#c44';
-          err.textContent = '✗ No cargó — revisa la ruta.';
-          gallery.appendChild(err);
-          continue;
-        }
-
-        const scale = Math.min(COMPOSITE_MAX_W / def.w, 1);
-        const dw = Math.round(def.w * scale);
-        const dh = Math.round(def.h * scale);
-        const c = makeCanvas(dw, dh);
-        c.getContext('2d').drawImage(res.img, 0, 0, def.w, def.h, 0, 0, dw, dh);
-
-        const wrap = document.createElement('div');
-        wrap.className = 'composite-wrap';
-        wrap.appendChild(c);
-
-        if (key === 'bgRef') {
-          const note = document.createElement('div');
-          note.className = 'composite-note';
-          note.textContent = 'REFERENCIA — no usar en juego. Solo para composición visual.';
-          wrap.appendChild(note);
-        }
-
-        gallery.appendChild(wrap);
-      }
-    }
-
-    loadStage2Assets().then(loaded => {
-      const okCount = buildStatusPanel(loaded);
-      buildGallery(loaded);
-
-      const total = Object.keys(STAGE2_MANIFEST).length;
       document.getElementById('summary').innerHTML =
-        `<b>${okCount}/${total}</b> assets cargados correctamente. ` +
-        (okCount === total
-          ? '<span style="color:#4c4">✓ Sin errores 404.</span>'
-          : `<span style="color:#c44">✗ ${total - okCount} asset(s) fallaron — revisar consola.</span>`);
+        '<b>' + okCount + '/' + total + '</b> assets cargados. ' +
+        (okCount === total ? '<span style="color:#4c4">✓ Sin errores 404.</span>'
+                           : '<span style="color:#c44">✗ ' + (total-okCount) + ' fallaron.</span>');
     });
   </script>
 </body>
