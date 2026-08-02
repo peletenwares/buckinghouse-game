@@ -441,3 +441,53 @@ content-box a una altura objetivo preservando aspecto y anclando en los pies
 - La franja de suelo (plataforma ancha estirada) en escenas planas es correcta y
   soporta al personaje, pero estéticamente lee como calzada elevada sobre la
   vereda del fondo; mejora cosmética futura opcional.
+
+---
+
+## Rediseño de integración visual (2026-08-02) — Commute v2
+
+Corrección profunda de suelo, carriles, fondos, colisiones y composición.
+
+### Suelo
+- Eliminada la "pista metálica larga" como piso general. El suelo de las escenas
+  planas es **colisión invisible** (`makePlatform(...,{ghost:true})`) alineada con
+  la vereda pintada de cada fondo. `groundY` medido por fondo:
+  apartment 615 · crossing 600 · Santa Lucía 548/578/608 · gate 600 · bus 560 · clínica 600.
+- **Solo `MOVING_PLATFORM_CROSSING`** dibuja plataformas (su mecánica), con autos
+  en el foso debajo.
+
+### Fondos
+- Nuevo `drawBg`: una sola imagen escalada a la altura del viewport, desplazada
+  **1:1** con la cámara, sin repetir ni costuras. `worldW = 1980 ≤ bg.scaledW (1988)`
+  para que el suelo cubra toda la escena. Cámara acotada a `[0, worldW-1280]`.
+
+### Santa Lucía — carriles
+- 3 carriles apoyados en la plaza (pies 548/578/608) con **escala de profundidad**
+  (0.84 / 0.92 / 1.0). Nadie flota en el cielo.
+- **Colisión por carril**: raptores/peatones solo golpean si `lane === carril del
+  jugador` (antes, por la poca separación vertical, todos los carriles se solapaban
+  y el esquive no servía). Cantante ralentiza por proximidad en X.
+- Ordenamiento por profundidad (pies) en el dibujo de actores/ítems.
+
+### Bug de input corregido
+- Al entrar/salir de carriles, `updateUpDown → destroyTouchButtons` ponía en `false`
+  las teclas — incluida una **tecla física sostenida** (p.ej. Derecha) — dejando al
+  jugador clavado. Ahora el estado táctil (`_touch`) es independiente del teclado
+  (`_keys`); destruir botones táctiles ya no toca el teclado.
+
+### HUD / UX
+- Objetivo Bip fijo en **5/5**; los saldos extra se muestran como **"+N bonus"** y
+  suman +2s cada uno (no más `12/5`).
+
+### Debug
+- Tecla **B**: vista de validación con línea de suelo, carriles, hitboxes, anclas
+  de pies, zona de puerta de la micro, nombre de escena y checkpoint.
+- `Stage2.state()` para introspección de QA (escena, timer, bip, playerX, hints).
+
+### QA
+- **Partida real completa sin cheats** (Playwright): INTRO→…→COMPLETE, timer 192,
+  0 errores JS. El personaje va por el suelo correcto en cada escena; las
+  plataformas solo dominan el cruce; nadie camina por el cielo; fondos completos.
+- Tests: **185/185 OK**. Tamaños 1920×1080 / 1366×768 / 844×390 OK. Stage 1 y
+  legacy sin regresión. Sin `cuñada`; personaje = **Nico**; sin café/coffee power-up.
+- Capturas en `artifacts/stage2-qa/` (gitignored).

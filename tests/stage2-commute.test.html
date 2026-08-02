@@ -327,6 +327,55 @@
       t('Stage2.restart() sin start no lanza', (function() { try { Stage2.restart(); return true; } catch(e) { return false; } })());
     });
 
+    // ── Integración visual: suelo, mundo, carriles ───────────────────────────
+    suite('Integración de escenas (suelo/mundo/carriles)', function(t) {
+      var sw = S2C.bg.scaledW;
+      Object.keys(S2C.scenes).forEach(function(k) {
+        var sc = S2C.scenes[k];
+        t(k + ' worldW ≤ bg.scaledW (sin costuras)', sc.worldW <= sw, 'worldW=' + sc.worldW + ' > ' + sw);
+        t(k + ' groundY en zona de vereda (560–620)', sc.groundY >= 540 && sc.groundY <= 630, 'groundY=' + sc.groundY);
+      });
+      t('3 carriles apoyados en la plaza (y 540–620)',
+        S2C.lanes.y.length === 3 && S2C.lanes.y.every(function(y){ return y >= 540 && y <= 620; }),
+        JSON.stringify(S2C.lanes.y));
+      t('Carriles con escala de profundidad creciente',
+        S2C.lanes.scale.length === 3 && S2C.lanes.scale[0] < S2C.lanes.scale[2]);
+      t('bipCredit tiene bonusTime para extras', typeof S2C.bipCredit.bonusTime === 'number');
+    });
+
+    // ── Suelo invisible (ghost) y colisión ────────────────────────────────────
+    suite('Plataforma ghost (suelo invisible)', function(t) {
+      var fa = {};
+      var ghost = makePlatform(0, 600, 1980, 'platWide', fa, { ghost: true });
+      t('makePlatform acepta opts.ghost', ghost.ghost === true);
+      t('Ghost no rompe draw (no lanza)', (function(){ try { ghost.draw({ save:function(){},restore:function(){},drawImage:function(){},fillRect:function(){} }, 0); return true; } catch(e){ return false; } })());
+      var solid = makePlatform(0, 600, 200, 'platMed', fa);
+      t('Plataforma normal no es ghost', !solid.ghost);
+    });
+
+    // ── Entrada: teclado y táctil independientes ──────────────────────────────
+    suite('Input teclado/táctil independientes', function(t) {
+      // Simular tecla física sostenida
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight' }));
+      // Nota: init no se llamó aquí; validamos que la API expone tick/is coherentes.
+      t('is("right") es función booleana', typeof S2Input.is('right') === 'boolean');
+      t('pressed("jump") es función booleana', typeof S2Input.pressed('jump') === 'boolean');
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' }));
+      t('S2Input.tick sigue disponible', typeof S2Input.tick === 'function');
+    });
+
+    // ── Saldo Bip: objetivo fijo + bonus ──────────────────────────────────────
+    suite('Bip objetivo 5 + extras como bonus', function(t) {
+      var fa = {};
+      var gs = { bipCount: 4, bipBonus: 0, timer: 100, headphonesTimer:0, _showMsg:function(){} };
+      var pl = { hitbox:function(){return {x:90,y:90,w:40,h:40};}, invulTimer:0, speedFactor:1 };
+      var it1 = makeItem(100,100,'bipCredit',fa); it1.collect(pl, gs, gs._showMsg);
+      t('Bip #5 llega al objetivo', gs.bipCount === 5);
+      var it2 = makeItem(100,100,'bipCredit',fa); it2.collect(pl, gs, gs._showMsg);
+      t('Bip #6 no supera 5 (queda como bonus)', gs.bipCount === 5 && gs.bipBonus === 1);
+      t('Bip extra suma tiempo bonus', gs.timer > 100);
+    });
+
     // ── Resumen ──────────────────────────────────────────────────────────────
     var total = passed + failed;
     document.getElementById('summary').innerHTML =

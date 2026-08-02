@@ -77,11 +77,18 @@ function drawHUD(ctx, gs) {
   ctx.fillStyle = gs.timer < 20 ? H.colorWarn : H.colorText;
   ctx.fillText(mm + ':' + ss, S2C.W / 2, 34);
 
-  // ── Saldo Bip (izquierda) ──
+  // ── Saldo Bip (izquierda) — objetivo fijo en 5; extras como bonus ──
+  var req   = S2C.bipCredit.required;
+  var shown = Math.min(gs.bipCount, req);
   ctx.font      = H.fontMd;
   ctx.textAlign = 'left';
-  ctx.fillStyle = gs.bipCount >= S2C.bipCredit.required ? H.colorOk : H.colorText;
-  ctx.fillText('Bip ' + gs.bipCount + '/' + S2C.bipCredit.required, 14, 33);
+  ctx.fillStyle = gs.bipCount >= req ? H.colorOk : H.colorText;
+  ctx.fillText('Bip ' + shown + '/' + req, 14, 33);
+  if (gs.bipBonus) {
+    ctx.font = H.fontSm;
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('+' + gs.bipBonus + ' bonus', 96, 32);
+  }
 
   // ── Audífonos (derecha) ──
   if (gs.headphonesTimer > 0) {
@@ -164,6 +171,70 @@ function drawLoseScreen(ctx, gs) {
   }
 }
 
+// ── Debug de escena: suelo, carriles, hitboxes, anclas de pies ────────────────
+function drawSceneDebug(ctx) {
+  if (!_sm || !_sm.scene || !_sm.scene.debugInfo) return;
+  var info = _sm.scene.debugInfo();
+  var camX = info.camX || 0;
+
+  ctx.save();
+  ctx.lineWidth = 1;
+
+  // Línea de suelo
+  if (typeof info.groundY === 'number') {
+    ctx.strokeStyle = 'rgba(0,255,180,0.9)';
+    ctx.beginPath(); ctx.moveTo(0, info.groundY); ctx.lineTo(S2C.W, info.groundY); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,255,180,0.9)'; ctx.font = '11px monospace'; ctx.textAlign = 'left';
+    ctx.fillText('groundY ' + Math.round(info.groundY), 4, info.groundY - 3);
+  }
+  // Carriles
+  if (info.lanes) {
+    info.lanes.forEach(function(ly, i) {
+      ctx.strokeStyle = 'rgba(120,200,255,0.8)';
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(S2C.W, ly); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(120,200,255,0.9)'; ctx.font = '11px monospace';
+      ctx.fillText('lane ' + i + ' y=' + ly, 4, ly - 3);
+    });
+  }
+  // Plataformas
+  if (info.platforms) info.platforms.forEach(function(p) { if (p.drawDebug) p.drawDebug(ctx, camX); });
+  // Zona de caída
+  if (typeof info.fallY === 'number') {
+    ctx.strokeStyle = 'rgba(255,80,80,0.7)'; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(0, info.fallY); ctx.lineTo(S2C.W, info.fallY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // Hitboxes + ancla de pies de actores
+  function drawHB(o, color) {
+    if (!o || !o.hitbox) return;
+    var hb = o.hitbox();
+    ctx.strokeStyle = color;
+    ctx.strokeRect(Math.round(hb.x - camX), Math.round(hb.y), Math.round(hb.w), Math.round(hb.h));
+    // ancla de pies (centro-inferior del hitbox)
+    var fx = hb.x + hb.w / 2 - camX, fy = hb.y + hb.h;
+    ctx.fillStyle = '#ff3';
+    ctx.fillRect(Math.round(fx) - 2, Math.round(fy) - 2, 4, 4);
+  }
+  (info.actors || []).forEach(function(a) { if (a && a.active !== false) drawHB(a, 'rgba(0,255,0,0.85)'); });
+  (info.items || []).forEach(function(it) { if (it && it.active) drawHB(it, 'rgba(255,255,0,0.7)'); });
+  (info.props || []).forEach(function(p) {
+    if (p && typeof p.x === 'number') {
+      ctx.fillStyle = '#f0f'; ctx.fillRect(Math.round(p.x - camX) - 2, Math.round((p.y||0)) - 2, 4, 4);
+    }
+  });
+  if (info.micro && info.micro.active) {
+    ctx.strokeStyle = 'rgba(0,255,255,0.8)';
+    ctx.strokeRect(Math.round(info.micro.x - camX), Math.round(info.micro.y), Math.round(info.micro.rW), Math.round(info.micro.rH));
+    if (info.micro.state === 'open') {
+      ctx.fillStyle = 'rgba(0,255,255,0.18)';
+      ctx.fillRect(Math.round(info.micro.doorX - camX), Math.round(info.micro.y), Math.round(info.micro.doorW), Math.round(info.micro.rH));
+    }
+  }
+  ctx.restore();
+}
+
 // ── Debug overlay ─────────────────────────────────────────────────────────────
 function drawDebugOverlay(ctx, gs) {
   ctx.save();
@@ -181,6 +252,7 @@ function drawDebugOverlay(ctx, gs) {
     'Falls: ' + (_gs ? _gs.falls : '—'),
     'Headphones: ' + (_gs ? _gs.headphonesTimer.toFixed(1) : '—'),
     'Checkpoint: ' + (_gs && _gs.checkpoint ? _gs.checkpoint.scene : 'none'),
+    'Bounds(B): ' + (_dbgBounds ? 'ON' : 'off'),
   ];
   lines.forEach(function(l, i) { ctx.fillText(l, 6, 72 + i * 16); });
   ctx.restore();
@@ -192,9 +264,11 @@ function drawDebugOverlay(ctx, gs) {
   if (S2Input.pressed('dbgInvul') && _sm && _sm.scene && _sm.scene.getPlayer) {
     _sm.scene.getPlayer().invulTimer = 30;
   }
+  if (S2Input.pressed('dbgBounds')) _dbgBounds = !_dbgBounds;
 }
 
 var _lastDt = 0.016;
+var _dbgBounds = false;   // vista de hitboxes/suelo/carriles (tecla B)
 
 var SCENE_ORDER = [
   'INTRO','APARTMENT_RUN','MOVING_PLATFORM_CROSSING','SANTA_LUCIA_LANES',
@@ -239,6 +313,7 @@ function loop(timestamp) {
   }
   if (_gs && scKey === 'COMPLETE') drawWinScreen(_ctx, _gs);
   if (_gs && scKey === 'FAILED')   drawLoseScreen(_ctx, _gs);
+  if (_debug && _dbgBounds && scKey !== 'COMPLETE' && scKey !== 'FAILED') drawSceneDebug(_ctx);
   if (_debug) drawDebugOverlay(_ctx, _gs);
 
   // Guardar estado del frame actual como "previo" para pressed() del próximo frame
@@ -250,6 +325,7 @@ function freshGameState() {
   var gs = {
     timer:           S2C.timer.start,
     bipCount:        0,
+    bipBonus:        0,
     falls:           0,
     hits:            0,
     caughtFirstBus:  false,
@@ -393,6 +469,19 @@ function resize() {
   resizeCanvas();
 }
 
-window.Stage2 = { devStart: devStart, start: start, stop: stop, restart: restart, resize: resize };
+// Introspección para QA/tests (no altera el juego).
+function state() {
+  return {
+    key: _sm ? _sm.key : null,
+    timer: _gs ? _gs.timer : null,
+    bipCount: _gs ? _gs.bipCount : null,
+    bipBonus: _gs ? _gs.bipBonus : null,
+    playerX: (_sm && _sm.scene && _sm.scene.getPlayer) ? _sm.scene.getPlayer().x : null,
+    laneHint: (_sm && _sm.scene && _sm.scene.laneHint) ? _sm.scene.laneHint() : null,
+    boardHint: (_sm && _sm.scene && _sm.scene.boardHint) ? _sm.scene.boardHint() : null,
+  };
+}
+
+window.Stage2 = { devStart: devStart, start: start, stop: stop, restart: restart, resize: resize, state: state };
 
 }());

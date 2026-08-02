@@ -60,27 +60,30 @@ function advanceFrame(entity, dt, fps, totalFrames, loop) {
 }
 
 // ── Plataforma estática ───────────────────────────────────────────────────────
-function makePlatform(x, y, w, assetKey, assets) {
+// opts.ghost = true → solo colisión (no dibuja); usado como suelo invisible
+// alineado con la vereda del fondo en las escenas planas.
+function makePlatform(x, y, w, assetKey, assets, opts) {
   var C = S2C.platform;
-  // altura visual proporcional al ancho del asset (para no aplastar)
+  opts = opts || {};
   return {
     x: x, y: y, w: w, h: C.h,
     active: true,
+    ghost: !!opts.ghost,
     vx: 0, vy: 0,
     assetKey: assetKey,
     draw: function(ctx, camX) {
+      if (this.ghost) return;  // suelo invisible: colisión sin dibujo
       var entry = assets[assetKey];
       var def   = S2_MANIFEST[assetKey];
-      // Altura visual del sprite (mantiene su aspecto sobre el ancho lógico)
       var visH = def && def.refW ? Math.min(this.w * def.refH / def.refW, 120) : this.h;
-      var dy   = this.y + this.h - visH;  // apoyar la superficie superior lógica
+      var dy   = this.y + this.h - visH;
       if (!drawContentStretched(ctx, entry, def, 0, this.x - camX, dy, this.w, visH)) {
         ctx.fillStyle = 'rgba(80,60,40,0.85)';
         ctx.fillRect(this.x - camX, this.y, this.w, this.h);
       }
     },
     drawDebug: function(ctx, camX) {
-      ctx.strokeStyle = 'rgba(255,200,0,0.7)';
+      ctx.strokeStyle = this.ghost ? 'rgba(0,255,180,0.9)' : 'rgba(255,200,0,0.7)';
       ctx.lineWidth = 1;
       ctx.strokeRect(this.x - camX, this.y, this.w, this.h);
     },
@@ -147,17 +150,22 @@ function makeVendor(x, assets) {
     x: x, y: 0,
     w: rH, h: rH,
     active: true,
+    depthScale: 1,
     _frame: 0, _animTimer: 0,
     cooldown: 0,
     setGround: function(gy) { this.y = gy - rH; },
-    hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
+    hitbox: function() {
+      var s = this.depthScale, cx = this.x + rH / 2, footY = this.y + rH;
+      var w = CC.hitW * s, h = CC.hitH * s;
+      return { x: cx - w / 2, y: footY - h, w: w, h: h };
+    },
     update: function(dt) {
       advanceFrame(this, dt, CC.fps, s2FrameCount('vendor'), true);
       if (this.cooldown > 0) this.cooldown -= dt;
     },
     draw: function(ctx, camX) {
       drawContentFrame(ctx, assets.vendor, S2_MANIFEST.vendor, this._frame,
-        this.x + rH / 2 - camX, this.y + rH, rH, false);
+        this.x + rH / 2 - camX, this.y + rH, rH * this.depthScale, false);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -185,17 +193,22 @@ function makePedestrian(x, assets) {
     x: x, y: 0,
     w: rH, h: rH,
     active: true,
+    depthScale: 1,
     _frame: 0, _animTimer: 0,
     speed: CC.speed,
     setGround: function(gy) { this.y = gy - rH; },
-    hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
+    hitbox: function() {
+      var s = this.depthScale, cx = this.x + rH / 2, footY = this.y + rH;
+      var w = CC.hitW * s, h = CC.hitH * s;
+      return { x: cx - w / 2, y: footY - h, w: w, h: h };
+    },
     update: function(dt) {
       advanceFrame(this, dt, CC.fps, s2FrameCount('pedestrian'), true);
       this.x += this.speed * dt;
     },
     draw: function(ctx, camX) {
       drawContentFrame(ctx, assets.pedestrian, S2_MANIFEST.pedestrian, this._frame,
-        this.x + rH / 2 - camX, this.y + rH, rH, false);
+        this.x + rH / 2 - camX, this.y + rH, rH * this.depthScale, false);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -227,11 +240,16 @@ function makeVelociraptor(x, laneY, assets, useAlt) {
     x: x, y: laneY - rH,
     w: rH, h: rH,
     active: true,
+    depthScale: 1,
     _frame: 0, _animTimer: 0,
     cooldown: 0,
     lane: null,
     assetKey: key,
-    hitbox: function() { return { x: this.x + CC.hitOX, y: this.y + CC.hitOY, w: CC.hitW, h: CC.hitH }; },
+    hitbox: function() {
+      var s = this.depthScale, cx = this.x + rH / 2, footY = this.y + rH;
+      var w = CC.hitW * s, h = CC.hitH * s;
+      return { x: cx - w / 2, y: footY - h, w: w, h: h };
+    },
     update: function(dt, worldLeft) {
       advanceFrame(this, dt, CC.fps, s2FrameCount(key), true);
       if (this.cooldown > 0) this.cooldown -= dt;
@@ -241,7 +259,7 @@ function makeVelociraptor(x, laneY, assets, useAlt) {
     draw: function(ctx, camX) {
       // mira a la izquierda (viene de la derecha) → flip
       drawContentFrame(ctx, assets[key], S2_MANIFEST[key], this._frame,
-        this.x + rH / 2 - camX, this.y + rH, rH, true);
+        this.x + rH / 2 - camX, this.y + rH, rH * this.depthScale, true);
     },
     drawDebug: function(ctx, camX) {
       var hb = this.hitbox();
@@ -273,12 +291,14 @@ function makeSinger(x, assets, gender) {
     x: x, y: 0,
     w: rH, h: rH,
     active: true,
+    depthScale: 1,
     _frame: 0, _animTimer: 0,
     gender: gender || 'male',
     setGround: function(gy) { this.y = gy - rH; },
     influenceBox: function() {
-      return { x: this.x - CC.influenceW / 2, y: this.y - 20,
-               w: CC.influenceW + rH, h: rH + 40 };
+      var s = this.depthScale;
+      return { x: this.x + rH / 2 - CC.influenceW / 2, y: this.y + rH - rH * s - 20,
+               w: CC.influenceW, h: rH * s + 40 };
     },
     hitbox: function() { return this.influenceBox(); },
     update: function(dt) {
@@ -286,7 +306,7 @@ function makeSinger(x, assets, gender) {
       noteTimer += dt;
       if (noteTimer > 0.45) {
         noteTimer = 0;
-        notes.push({ x: this.x + rH * 0.5, y: this.y, vy: -40, alpha: 1.0 });
+        notes.push({ x: this.x + rH * 0.5, y: this.y + rH - rH * this.depthScale, vy: -40, alpha: 1.0 });
       }
       for (var i = notes.length - 1; i >= 0; i--) {
         notes[i].y  += notes[i].vy * dt;
@@ -296,7 +316,7 @@ function makeSinger(x, assets, gender) {
     },
     draw: function(ctx, camX) {
       drawContentFrame(ctx, assets[key], S2_MANIFEST[key], this._frame,
-        this.x + rH / 2 - camX, this.y + rH, rH, false);
+        this.x + rH / 2 - camX, this.y + rH, rH * this.depthScale, false);
       // Notas musicales (FX icono de notas)
       var fxEntry = assets.fx;
       var fxDef   = S2_MANIFEST.fx;
@@ -350,8 +370,14 @@ function makeItem(x, y, type, assets) {
       if (!overlaps(player.hitbox(), this.hitbox())) return false;
       this.active = false;
       if (type === 'bipCredit') {
-        gs.bipCount++;
-        showMsg('Saldo Bip +1', '#ffd166');
+        if (gs.bipCount < CC.required) {
+          gs.bipCount++;
+          showMsg('Saldo Bip ' + gs.bipCount + '/' + CC.required, '#ffd166');
+        } else {
+          gs.bipBonus = (gs.bipBonus || 0) + 1;
+          gs.timer += CC.bonusTime;
+          showMsg('Bip extra +' + CC.bonusTime + 's', '#ffd166');
+        }
       } else if (type === 'bonusClock') {
         gs.timer += CC.timeBonus;
         showMsg('+' + CC.timeBonus + 's', '#6bff9e');
@@ -421,7 +447,7 @@ function makeValidator(x, y, assets) {
 
 // ── Micro (autobús) ───────────────────────────────────────────────────────────
 function makeMicro(startX, groundY, assets) {
-  var rH = 140;
+  var rH = 176;
   var def = S2_MANIFEST.micro;
   var rW = def && def.refW ? rH * def.refW / def.refH : rH;  // aspecto real
   return {
@@ -432,11 +458,11 @@ function makeMicro(startX, groundY, assets) {
     rW: rW, rH: rH,
 
     get doorX() { return this.x + rW * 0.28; },
-    get doorW()  { return rW * 0.22; },
+    get doorW()  { return rW * 0.24; },
 
     update: function(dt) {
       if (this.state === 'arriving') {
-        var target = 720;
+        var target = 700;
         this.x += (target - this.x) * Math.min(1, dt * 3);
         if (Math.abs(this.x - target) < 2) { this.x = target; this.state = 'open'; }
       } else if (this.state === 'leaving') {

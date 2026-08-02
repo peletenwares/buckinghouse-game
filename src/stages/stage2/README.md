@@ -52,6 +52,18 @@ Stage2.devStart() // Igual que start() pero standalone (sin Stage1)
 | Cambiar carril (Santa Lucía) | ▲ ▼ | Botones ▲ ▼ (aparecen solo en esa escena) |
 | Pausar / reiniciar | Escape / P | — |
 
+> El personaje se llama **Nico** en todos los textos.
+
+## Suelo y fondos
+
+- Cada fondo (2084×755) se escala a la altura del viewport y se desplaza **1:1**
+  con la cámara, **sin repetir ni costuras**. `worldW ≤ bg.scaledW` (~1988) por
+  escena, así el suelo pintado (vereda/calle) cubre todo el nivel.
+- El suelo real de cada escena es **colisión invisible** (`makePlatform(...,{ghost:true})`)
+  alineada con la vereda del fondo. `groundY` por escena en `S2C.scenes`.
+- **Solo `MOVING_PLATFORM_CROSSING`** dibuja plataformas como mecánica; el resto
+  de las escenas NO usan la pista metálica como piso.
+
 ## Escenas detalladas
 
 ### APARTMENT_RUN
@@ -68,9 +80,12 @@ Stage2.devStart() // Igual que start() pero standalone (sin Stage1)
 
 ### SANTA_LUCIA_LANES
 - Fondo: `bgMetro` (02-escenario.png)
-- 3 carriles verticales (Y: 308, 438, 558 px)
+- 3 carriles **apoyados en la plaza** (Y de pies: 548 / 578 / 608), con escala de
+  profundidad (fondo más pequeño, frente más grande). Nadie camina por el cielo.
 - Arriba/Abajo cambia carril suavemente
-- Cantantes crean zona de lentificación × 0.6
+- **Colisión por carril**: un velociraptor/peatón solo golpea si va en el mismo
+  carril del jugador (el esquive por carril funciona pese a la poca separación).
+- Cantantes crean zona de lentificación × 0.6 (por proximidad en X)
 - Audífonos neutralizan lentificación por 8s
 - Patrones de velociraptores garantizan siempre un carril libre
 
@@ -158,6 +173,8 @@ Teclas de debug (solo con `?debug=1`):
 - `-` — −15s al timer
 - `N` — completar objetivo actual
 - `I` — activar invulnerabilidad 30s
+- `B` — alternar vista de validación (línea de suelo, carriles, hitboxes,
+  anclas de pies, zona de puerta de la micro)
 
 ## Ejecución local
 

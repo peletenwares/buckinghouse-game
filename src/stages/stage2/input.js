@@ -1,10 +1,14 @@
 'use strict';
 
 var S2Input = (function() {
-  var _keys = {};
-  var _prev = {};
+  var _keys = {};   // estado del teclado físico
+  var _touch = {};  // estado sintético de botones táctiles (independiente)
+  var _prev = {};   // snapshot combinado del frame anterior
   var _touchBtns = [];
   var _kdownFn, _kupFn;
+
+  // Una tecla está activa si el teclado o un botón táctil la sostienen.
+  function activeKey(k) { return !!_keys[k] || !!_touch[k]; }
 
   // Teclas mapeadas
   var MAP = {
@@ -22,6 +26,7 @@ var S2Input = (function() {
     dbgComplete: ['KeyN'],
     dbgRestart:  ['KeyR'],
     dbgInvul:    ['KeyI'],
+    dbgBounds:   ['KeyB'],
   };
 
   function keyName(e) { return e.code || e.key; }
@@ -41,7 +46,7 @@ var S2Input = (function() {
     var keys = MAP[action];
     if (!keys) return false;
     for (var i = 0; i < keys.length; i++) {
-      if (_keys[keys[i]]) return true;
+      if (activeKey(keys[i])) return true;
     }
     return false;
   }
@@ -50,14 +55,17 @@ var S2Input = (function() {
     var keys = MAP[action];
     if (!keys) return false;
     for (var i = 0; i < keys.length; i++) {
-      if (_keys[keys[i]] && !_prev[keys[i]]) return true;
+      if (activeKey(keys[i]) && !_prev[keys[i]]) return true;
     }
     return false;
   }
 
   function tick() {
-    // Copia estado actual → previo al fin del frame
-    _prev = Object.assign({}, _keys);
+    // Snapshot combinado (teclado + táctil) → previo, al fin del frame.
+    _prev = {};
+    var k;
+    for (k in _keys)  if (_keys[k])  _prev[k] = true;
+    for (k in _touch) if (_touch[k]) _prev[k] = true;
   }
 
   // ── Botones táctiles ──────────────────────────────────────────────────────
@@ -96,10 +104,10 @@ var S2Input = (function() {
     function setActive(active) {
       if (active) {
         el.style.background = 'rgba(255,255,255,0.34)';
-        vKeys.forEach(function(k) { _keys[k] = true; });
+        vKeys.forEach(function(k) { _touch[k] = true; });
       } else {
         el.style.background = 'rgba(255,255,255,0.16)';
-        vKeys.forEach(function(k) { _keys[k] = false; });
+        vKeys.forEach(function(k) { _touch[k] = false; });
       }
     }
 
@@ -142,8 +150,10 @@ var S2Input = (function() {
   }
 
   function destroyTouchButtons() {
+    // Sólo limpia el estado táctil sintético; nunca el teclado físico
+    // (así una tecla sostenida sobrevive al recrear botones al entrar/salir de carriles).
     _touchBtns.forEach(function(b) {
-      b.vKeys.forEach(function(k) { _keys[k] = false; });
+      b.vKeys.forEach(function(k) { _touch[k] = false; });
       if (b.el && b.el.parentNode) b.el.parentNode.removeChild(b.el);
     });
     _touchBtns = [];
@@ -161,7 +171,7 @@ var S2Input = (function() {
     window.removeEventListener('keydown', _kdownFn);
     window.removeEventListener('keyup',   _kupFn);
     destroyTouchButtons();
-    _keys = {}; _prev = {};
+    _keys = {}; _touch = {}; _prev = {};
   }
 
   function updateUpDown(enable) {

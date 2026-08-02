@@ -36,14 +36,16 @@ const S2C = {
     minCheckpoint:  10,  // tiempo mínimo garantizado al restaurar checkpoint
   },
 
-  // Escenas — worldW y groundY
+  // Escenas — worldW y groundY.
+  // worldW ≤ bg.scaledW (1988) para que el fondo cubra 1:1 sin repetir ni costuras.
+  // groundY = línea de pies alineada con la vereda/suelo real de cada fondo.
   scenes: {
-    APARTMENT_RUN:           { worldW: 3700, groundY: 558 },
-    MOVING_PLATFORM_CROSSING:{ worldW: 2100, groundY: 558 },
-    SANTA_LUCIA_LANES:       { worldW: 3200, groundY: 558 },
-    METRO_GATE:              { worldW:  600, groundY: 558 },
-    BUS_STOP:                { worldW: 1400, groundY: 558 },
-    CLINIC_RUN:              { worldW: 1900, groundY: 558 },
+    APARTMENT_RUN:           { worldW: 1980, groundY: 615 },
+    MOVING_PLATFORM_CROSSING:{ worldW: 1980, groundY: 600 },
+    SANTA_LUCIA_LANES:       { worldW: 1980, groundY: 608 },
+    METRO_GATE:              { worldW:  600, groundY: 600 },
+    BUS_STOP:                { worldW: 1980, groundY: 560 },
+    CLINIC_RUN:              { worldW: 1980, groundY: 600 },
   },
 
   // Background (todos 2084×755)
@@ -97,7 +99,8 @@ const S2C = {
     renderH: 52,
     hitW: 44, hitH: 40, hitOX: 4, hitOY: 4,
     fps: 4,
-    required: 5,
+    required: 5,     // objetivo visible del HUD
+    bonusTime: 2,    // +s por cada Bip extra una vez alcanzado el objetivo
   },
   bonusClock: {
     renderH: 54,
@@ -189,12 +192,14 @@ const S2C = {
     colorOk:  '#6bff9e',
   },
 
-  // Carriles de Santa Lucía (Y de los pies del personaje)
+  // Carriles de Santa Lucía — apoyados en la vereda/plaza (Y de los pies).
+  // 3 filas de profundidad sobre el suelo real; escala por profundidad.
   lanes: {
-    y: [308, 438, 558],  // top, center, bottom
-    transitionSpeed: 600, // px/s de transición suave entre carriles
-    jumpH: 120,           // altura de salto dentro de un carril
-    defaultLane: 1,       // carril inicial (center)
+    y: [548, 578, 608],       // fondo (lejos) → frente (cerca)
+    scale: [0.84, 0.92, 1.0], // escala visual por profundidad
+    transitionSpeed: 520,     // px/s de transición suave entre carriles
+    jumpH: 96,                // altura de salto dentro de un carril
+    defaultLane: 1,           // carril inicial (central)
   },
 
   // Santa Lucía — patrones de velociraptores
