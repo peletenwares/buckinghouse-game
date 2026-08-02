@@ -3,14 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stage 2 Legacy — Wake Up (dev)</title>
-  <style>body { margin: 0; overflow: hidden; background: #000; }</style>
+  <title>Renombrada → Stage 3 (Despertarlos)</title>
+  <!-- COMPATIBILIDAD: la antigua etapa "wake-up" fue PROMOVIDA a Stage 3 oficial.
+       Esta URL se conserva y redirige a stage3-dev.html. -->
+  <meta http-equiv="refresh" content="3; url=stage3-dev.html">
+  <style>
+    body { margin:0; font-family:system-ui,sans-serif; background:#12100f; color:#eee;
+           display:flex; min-height:100vh; align-items:center; justify-content:center; text-align:center; }
+    .card { max-width:520px; padding:28px; }
+    h1 { color:#6bff9e; font-size:1.3rem; margin-bottom:12px; }
+    p { line-height:1.5; color:#cfcfcf; }
+    a { color:#ffd166; font-weight:700; }
+    .badge { display:inline-block; background:#1b5e20; color:#fff; padding:2px 10px; border-radius:4px; font-size:0.8rem; margin-bottom:16px; }
+  </style>
 </head>
 <body>
-  <!-- LEGACY — Stage 2 experimental de despertar (no llegó a producción). -->
-  <!-- La nueva Stage 2 oficial está en stage2-dev.html y index.html.     -->
-  <script src="src/stages/stage2-legacy-wake-up/manifest.js"></script>
-  <script src="src/stages/stage2-legacy-wake-up/stage2.js"></script>
-  <script>Stage2.devStart();</script>
+  <div class="card">
+    <div class="badge">RENOMBRADA</div>
+    <h1>La etapa “Wake-Up” ahora es Stage 3 — Despertarlos</h1>
+    <p>Se promovió de legacy a etapa oficial. Redirigiendo a
+       <a href="stage3-dev.html">stage3-dev.html</a>…</p>
+    <p>Si no ocurre automáticamente, usa el enlace de arriba.</p>
+  </div>
 </body>
 </html>

@@ -130,7 +130,7 @@
   var _lastTime = null;
 
   // — Control de arranque —
-  var _started      = false; // true mientras Stage2 está activo o cargando
+  var _started      = false; // true mientras Stage3 está activo o cargando
   var _startPromise = null;  // promesa en curso de start(); reutilizada si se llama dos veces
   var _runToken     = 0;     // token monotónico; stop() lo incrementa para invalidar cargas pendientes
 
@@ -150,6 +150,9 @@
   var _targets   = null; // inicializado en initTargets()
   var _diffLevel = 0;    // 0|1|2|3 — nivel de dificultad activo
   var _phase     = 'playing'; // 'playing' | 'completed'
+
+  // — Hook de completado hacia el host (progresión → GAME_COMPLETE) —
+  var _onComplete = null;     // callback opcional pasado por start({onComplete})
 
   // — Refs de handlers para cleanup —
   var _pdownFn, _pmoveFn, _pupFn, _pcancelFn, _plostFn;
@@ -199,7 +202,7 @@
 
   function pocketPos() {
     var cfg = C.slingshot;
-    var def = STAGE2_MANIFEST.slingshotIdle;
+    var def = STAGE3_MANIFEST.slingshotIdle;
     var dh  = Math.round(def.h * cfg.scale);
     return {
       x: cfg.centerX,
@@ -423,6 +426,11 @@
       t.hot = false; t.hotTimer = 0;
     });
     cancelDrag();
+    // Notificar al host UNA sola vez (progresión hacia la pantalla final).
+    if (_onComplete) {
+      var cb = _onComplete; _onComplete = null;
+      cb({ score: _score, alarm: _alarm });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -530,7 +538,7 @@
     if (!entry || !entry.ok) return;
 
     var cfg = C.slingshot;
-    var def = STAGE2_MANIFEST[key] || STAGE2_MANIFEST.slingshotIdle;
+    var def = STAGE3_MANIFEST[key] || STAGE3_MANIFEST.slingshotIdle;
     var dw  = Math.round(def.w * cfg.scale);
     var dh  = Math.round(def.h * cfg.scale);
     ctx.drawImage(entry.img, 0, 0, def.w, def.h,
@@ -540,7 +548,7 @@
   function drawClock() {
     var entry = assets.clockRed;
     if (!entry || !entry.ok) return;
-    var def = STAGE2_MANIFEST.clockRed;
+    var def = STAGE3_MANIFEST.clockRed;
     var dw  = Math.round(def.w * C.clockScale);
     var dh  = Math.round(def.h * C.clockScale);
     ctx.drawImage(entry.img, 0, 0, def.w, def.h,
@@ -550,7 +558,7 @@
   function drawProjectile(p) {
     var entry = assets.clockRed;
     if (!entry || !entry.ok) return;
-    var def = STAGE2_MANIFEST.clockRed;
+    var def = STAGE3_MANIFEST.clockRed;
     var dw  = Math.round(def.w * C.clockScale);
     var dh  = Math.round(def.h * C.clockScale);
     ctx.save();
@@ -604,7 +612,7 @@
 
   function drawScene() {
     var a = assets;
-    var m = STAGE2_MANIFEST;
+    var m = STAGE3_MANIFEST;
 
     ctx.clearRect(0, 0, C.W, C.H);
 
@@ -658,14 +666,14 @@
   // Canvas
   // ---------------------------------------------------------------------------
 
-  function resizeS2() {
+  function resizeS3() {
     var s = Math.min(window.innerWidth / C.W, window.innerHeight / C.H);
     canvas.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
   }
 
   function createCanvas() {
     canvas = document.createElement('canvas');
-    canvas.id = 's2canvas';
+    canvas.id = 's3canvas';
     canvas.width  = C.W;
     canvas.height = C.H;
     canvas.style.cssText = [
@@ -681,9 +689,9 @@
     document.body.appendChild(canvas);
     ctx = canvas.getContext('2d');
 
-    _resizeFn = resizeS2;
+    _resizeFn = resizeS3;
     window.addEventListener('resize', _resizeFn);
-    resizeS2();
+    resizeS3();
 
     _pdownFn   = onPointerDown;
     _pmoveFn   = onPointerMove;
@@ -705,15 +713,15 @@
     var results = {};
     return Promise.all(SCENE_KEYS.map(function (key) {
       return new Promise(function (resolve) {
-        var src = STAGE2_MANIFEST[key].src;
+        var src = STAGE3_MANIFEST[key].src;
         var img = new Image();
         img.onload  = function () { results[key] = { img: img, ok: true }; resolve(); };
         img.onerror = function () {
           results[key] = { img: null, ok: false };
           if (REQUIRED_SCENE_KEYS.indexOf(key) !== -1) {
-            console.error('[Stage2] ERROR: escena obligatoria no cargó:', src);
+            console.error('[Stage3] ERROR: escena obligatoria no cargó:', src);
           } else {
-            console.warn('[Stage2] Asset no cargó:', src);
+            console.warn('[Stage3] Asset no cargó:', src);
           }
           resolve();
         };
@@ -739,7 +747,10 @@
     });
   }
 
-  function start() {
+  function start(opts) {
+    // opts.onComplete(stats) se invoca UNA vez cuando la alarma llega a 100%.
+    _onComplete = (opts && typeof opts.onComplete === 'function') ? opts.onComplete : null;
+
     if (_startPromise) return _startPromise; // carga en curso: reutilizar promesa
     if (_started)      return Promise.resolve(); // ya activo y resuelto: no-op
 
@@ -749,8 +760,8 @@
 
     _startPromise = loadSceneAssets().then(function (loaded) {
       if (!_started || token !== _runToken) {
-        var e = new Error('Stage2 start cancelled');
-        e.code = 'STAGE2_START_CANCELLED';
+        var e = new Error('Stage3 start cancelled');
+        e.code = 'STAGE3_START_CANCELLED';
         return Promise.reject(e);
       }
       assets     = loaded;
@@ -763,10 +774,10 @@
       _rafId = requestAnimationFrame(loop);
     }).catch(function (err) {
       _startPromise = null;
-      if (err && err.code === 'STAGE2_START_CANCELLED') {
+      if (err && err.code === 'STAGE3_START_CANCELLED') {
         return Promise.reject(err);
       }
-      console.error('[Stage2] error cargando assets:', err);
+      console.error('[Stage3] error cargando assets:', err);
       _started = false;
       return Promise.reject(err);
     });
@@ -810,7 +821,14 @@
     _phase           = 'playing';
     _targets         = null;
     _started         = false;
+    _onComplete      = null;
   }
 
-  window.Stage2 = { devStart: devStart, start: start, stop: stop };
+  // Introspección para QA/tests (no altera el juego).
+  function state() {
+    return { phase: _phase, alarm: _alarm, score: _score,
+             projectiles: _projectiles.length, started: _started };
+  }
+
+  window.Stage3 = { devStart: devStart, start: start, stop: stop, state: state };
 }());
