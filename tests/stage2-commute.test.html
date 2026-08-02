@@ -52,13 +52,20 @@
       t('S2C existe',                      typeof S2C === 'object');
       t('S2C.W = 1280',                    S2C.W === 1280);
       t('S2C.H = 720',                     S2C.H === 720);
-      t('Timer inicial = 150s',            S2C.timer.start === 150);
+      t('Timer inicial = 60s (presupuesto total 1:00)', S2C.timer.start === 60);
+      t('Techo duro del cronómetro = 60s', S2C.timer.max === 60);
       t('Saldo Bip requerido = 5',         S2C.bipCredit.required === 5);
       t('gravity > 0',                     S2C.gravity > 0);
       t('jumpSpeed > 0',                   S2C.jumpSpeed > 0);
       t('3 carriles definidos',            Array.isArray(S2C.lanes.y) && S2C.lanes.y.length === 3);
-      t('Bonus APARTMENT_RUN = 15s',       S2C.checkpointBonus.APARTMENT_RUN === 15);
-      t('Bonus MOVING_PLATFORM_CROSSING = 20s', S2C.checkpointBonus.MOVING_PLATFORM_CROSSING === 20);
+      // 60s budget: NINGÚN bono de tiempo debe existir en la configuración.
+      t('Sin bloque checkpointBonus (bonos de tiempo eliminados)', typeof S2C.checkpointBonus === 'undefined');
+      t('bonusClock no tiene timeBonus (solo puntaje)', typeof S2C.bonusClock.timeBonus === 'undefined');
+      t('bonusClock da puntaje (score numérico)', typeof S2C.bonusClock.score === 'number');
+      t('bipCredit no tiene bonusTime (extra = puntaje)', typeof S2C.bipCredit.bonusTime === 'undefined');
+      t('bipCredit extra da puntaje (bonusScore numérico)', typeof S2C.bipCredit.bonusScore === 'number');
+      t('busStop sin bono de tiempo',      typeof S2C.busStop.bonus === 'undefined');
+      t('metroGate sin bono de tiempo',    typeof S2C.metroGate.bonus === 'undefined');
       t('Sin café como power-up',          !S2C.coffee && !S2C.cafe);
       t('dtMax <= 0.1',                    S2C.dtMax <= 0.1);
     });
@@ -341,7 +348,26 @@
         JSON.stringify(S2C.lanes.y));
       t('Carriles con escala de profundidad creciente',
         S2C.lanes.scale.length === 3 && S2C.lanes.scale[0] < S2C.lanes.scale[2]);
-      t('bipCredit tiene bonusTime para extras', typeof S2C.bipCredit.bonusTime === 'number');
+      t('bipCredit extra usa puntaje, no tiempo', typeof S2C.bipCredit.bonusScore === 'number' && typeof S2C.bipCredit.bonusTime === 'undefined');
+    });
+
+    // ── Presupuesto de 60s: los ítems no suman tiempo ─────────────────────────
+    suite('Cronómetro de 60s (sin bonos de tiempo)', function(t) {
+      var fa = {};
+      function gsStub(){ return { timer:60, score:0, bipCount:5, bipBonus:0, headphonesTimer:0, _showMsg:function(){} }; }
+      // Reloj bonus: solo puntaje, timer intacto.
+      var gs1 = gsStub();
+      var clock = makeItem(100, 100, 'bonusClock', fa);
+      var fakeP = { hitbox:function(){ return { x:90,y:90,w:60,h:60 }; } };
+      clock.collect(fakeP, gs1, gs1._showMsg);
+      t('Reloj bonus NO aumenta el cronómetro', gs1.timer === 60, 'timer='+gs1.timer);
+      t('Reloj bonus suma puntaje',            gs1.score > 0);
+      // Bip extra (ya alcanzado el objetivo): solo puntaje, timer intacto.
+      var gs2 = gsStub();
+      var bip = makeItem(100, 100, 'bipCredit', fa);
+      bip.collect(fakeP, gs2, gs2._showMsg);
+      t('Bip extra NO aumenta el cronómetro',  gs2.timer === 60, 'timer='+gs2.timer);
+      t('Bip extra suma puntaje',              gs2.score > 0);
     });
 
     // ── Suelo invisible (ghost) y colisión ────────────────────────────────────
@@ -366,15 +392,32 @@
     });
 
     // ── Saldo Bip: objetivo fijo + bonus ──────────────────────────────────────
-    suite('Bip objetivo 5 + extras como bonus', function(t) {
+    suite('Bip objetivo 5 + extras como bonus (puntaje, sin tiempo)', function(t) {
       var fa = {};
-      var gs = { bipCount: 4, bipBonus: 0, timer: 100, headphonesTimer:0, _showMsg:function(){} };
+      var gs = { bipCount: 4, bipBonus: 0, score: 0, timer: 60, headphonesTimer:0, _showMsg:function(){} };
       var pl = { hitbox:function(){return {x:90,y:90,w:40,h:40};}, invulTimer:0, speedFactor:1 };
       var it1 = makeItem(100,100,'bipCredit',fa); it1.collect(pl, gs, gs._showMsg);
       t('Bip #5 llega al objetivo', gs.bipCount === 5);
       var it2 = makeItem(100,100,'bipCredit',fa); it2.collect(pl, gs, gs._showMsg);
       t('Bip #6 no supera 5 (queda como bonus)', gs.bipCount === 5 && gs.bipBonus === 1);
-      t('Bip extra suma tiempo bonus', gs.timer > 100);
+      t('Bip extra NO suma tiempo (timer intacto)', gs.timer === 60, 'timer='+gs.timer);
+      t('Bip extra suma puntaje', gs.score > 0);
+    });
+
+    // ── Nombre Nico / cero "cuñada" (escaneo de fuente vía XHR síncrono) ───────
+    suite('Nombre Nico y cero "cuñada" en la Stage 2', function(t) {
+      function fetchSrc(url){
+        try { var x = new XMLHttpRequest(); x.open('GET', url, false); x.send(); return x.status===200 ? x.responseText : null; }
+        catch(e){ return null; }
+      }
+      var files = ['../src/stages/stage2/config.js','../src/stages/stage2/scenes.js',
+                   '../src/stages/stage2/entities.js','../src/stages/stage2/player.js',
+                   '../src/stages/stage2/stage2.js','../src/stages/stage2/manifest.js'];
+      var joined = '', loaded = 0;
+      files.forEach(function(f){ var s = fetchSrc(f); if(s!==null){ joined += '\n' + s; loaded++; } });
+      t('Fuentes de Stage 2 accesibles', loaded === files.length, loaded + '/' + files.length + ' cargadas');
+      t('Cero menciones de "cuñada" en la Stage 2', joined.indexOf('cuñada') === -1 && joined.indexOf('cunada') === -1);
+      t('El personaje se llama "Nico"', joined.indexOf('Nico') !== -1);
     });
 
     // ── Resumen ──────────────────────────────────────────────────────────────
