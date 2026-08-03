@@ -125,6 +125,9 @@
 
   // — Canvas / context —
   var canvas, ctx, assets, _resizeFn;
+  // Presentación (mismo contrato que la Etapa 1): canvas a tamaño de viewport y
+  // mundo lógico 1280×720 dibujado con transformación contain (dpr·scale).
+  var _renderScale = 1, _offX = 0, _offY = 0, _dpr = 1;
 
   // — RAF —
   var _rafId    = null;
@@ -194,11 +197,11 @@
   // ---------------------------------------------------------------------------
 
   function toVirtual(clientX, clientY) {
+    // El canvas llena el viewport; el mundo se dibuja contain (renderScale) y
+    // centrado (offX/offY, en px CSS). Se invierte esa transformación.
     var rect = canvas.getBoundingClientRect();
-    var sx = rect.width  / C.W;
-    var sy = rect.height / C.H;
-    return { x: (clientX - rect.left) / sx,
-             y: (clientY - rect.top)  / sy };
+    return { x: (clientX - rect.left - _offX) / _renderScale,
+             y: (clientY - rect.top  - _offY) / _renderScale };
   }
 
   function pocketPos() {
@@ -615,7 +618,7 @@
     var a = assets;
     var m = STAGE3_MANIFEST;
 
-    ctx.clearRect(0, 0, C.W, C.H);
+    applyView();   // presentación contain: llena el viewport como la Etapa 1
 
     // Capa 1 — Escena compuesta según progreso de alarma
     var sceneKey = getSceneKey(_alarm);
@@ -667,23 +670,41 @@
   // Canvas
   // ---------------------------------------------------------------------------
 
+  // Ajusta el buffer al viewport (con dpr) y calcula la escala contain + centrado.
+  // No cambia el mundo lógico (1280×720); solo la presentación.
   function resizeS3() {
-    var s = Math.min(window.innerWidth / C.W, window.innerHeight / C.H);
-    canvas.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+    if (!canvas) return;
+    var vw = Math.max(1, Math.round((window.visualViewport && window.visualViewport.width)  || window.innerWidth  || C.W));
+    var vh = Math.max(1, Math.round((window.visualViewport && window.visualViewport.height) || window.innerHeight || C.H));
+    _dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(vw * _dpr);
+    canvas.height = Math.round(vh * _dpr);
+    canvas.style.width  = vw + 'px';
+    canvas.style.height = vh + 'px';
+    _renderScale = Math.min(vw / C.W, vh / C.H);
+    _offX = Math.max(0, (vw - C.W * _renderScale) / 2);
+    _offY = Math.max(0, (vh - C.H * _renderScale) / 2);
+  }
+
+  // Limpia todo el buffer y fija la transformación de presentación del frame.
+  function applyView() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(_dpr * _renderScale, 0, 0, _dpr * _renderScale, _offX * _dpr, _offY * _dpr);
   }
 
   function createCanvas() {
     canvas = document.createElement('canvas');
     canvas.id = 's3canvas';
-    canvas.width  = C.W;
-    canvas.height = C.H;
+    // Canvas pegado a los bordes del viewport (igual que la Etapa 1).
     canvas.style.cssText = [
       'position:fixed',
-      'left:50%',
-      'top:50%',
+      'inset:0',
+      'width:100vw',
+      'height:100dvh',
       'display:block',
       'z-index:10',
-      'transform-origin:center center',
       'touch-action:none',
       'cursor:crosshair',
     ].join(';');
@@ -692,6 +713,9 @@
 
     _resizeFn = resizeS3;
     window.addEventListener('resize', _resizeFn);
+    window.addEventListener('orientationchange', _resizeFn);
+    window.addEventListener('fullscreenchange', _resizeFn);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', _resizeFn);
     resizeS3();
 
     _pdownFn   = onPointerDown;
@@ -805,7 +829,13 @@
       canvas = null;
     }
 
-    if (_resizeFn) { window.removeEventListener('resize', _resizeFn); _resizeFn = null; }
+    if (_resizeFn) {
+      window.removeEventListener('resize', _resizeFn);
+      window.removeEventListener('orientationchange', _resizeFn);
+      window.removeEventListener('fullscreenchange', _resizeFn);
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', _resizeFn);
+      _resizeFn = null;
+    }
 
     ctx              = null;
     assets           = null;

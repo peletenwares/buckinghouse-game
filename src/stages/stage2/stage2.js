@@ -6,6 +6,9 @@ var _canvas, _ctx;
 var _rafId = null, _lastTime = null;
 var _started = false, _startPromise = null, _runToken = 0;
 var _resizeFn, _s1hudEl;
+// Presentación (mismo contrato que la Etapa 1): el canvas llena el viewport y el
+// mundo lógico 1280×720 se dibuja con una transformación contain (dpr·scale).
+var _renderScale = 1, _offX = 0, _offY = 0, _dpr = 1;
 
 // ── Estado de juego ──────────────────────────────────────────────────────────
 var _assets = null;
@@ -316,8 +319,8 @@ function loop(timestamp) {
   if (_sm) _sm.update(dt);
   updateMessages(dt);
 
-  // Dibujar
-  _ctx.clearRect(0, 0, S2C.W, S2C.H);
+  // Dibujar (presentación contain: llena el viewport como la Etapa 1)
+  applyView();
   if (_sm) _sm.draw(_ctx);
   drawMessages(_ctx);
 
@@ -375,13 +378,13 @@ function restartGame() {
 function createCanvas() {
   _canvas = document.createElement('canvas');
   _canvas.id = 's2canvas';
-  _canvas.width  = S2C.W;
-  _canvas.height = S2C.H;
+  // Canvas pegado a los bordes del viewport (igual que la Etapa 1); el escalado
+  // del mundo se hace por transformación del contexto, no por CSS transform.
   _canvas.style.cssText = [
     'position:fixed',
-    'left:50%',
-    'top:50%',
-    'transform-origin:center center',
+    'inset:0',
+    'width:100vw',
+    'height:100dvh',
     'display:block',
     'touch-action:none',
     'z-index:10',
@@ -390,17 +393,44 @@ function createCanvas() {
   _ctx = _canvas.getContext('2d');
   _resizeFn = resizeCanvas;
   window.addEventListener('resize', _resizeFn);
+  window.addEventListener('orientationchange', _resizeFn);
+  window.addEventListener('fullscreenchange', _resizeFn);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', _resizeFn);
   resizeCanvas();
 }
 
+// Ajusta el buffer al viewport (con dpr) y calcula la escala contain + centrado.
+// No cambia el mundo lógico (1280×720); solo la presentación.
 function resizeCanvas() {
   if (!_canvas) return;
-  var s = Math.min(window.innerWidth / S2C.W, window.innerHeight / S2C.H);
-  _canvas.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+  var vw = Math.max(1, Math.round((window.visualViewport && window.visualViewport.width)  || window.innerWidth  || S2C.W));
+  var vh = Math.max(1, Math.round((window.visualViewport && window.visualViewport.height) || window.innerHeight || S2C.H));
+  _dpr = Math.min(window.devicePixelRatio || 1, 2);
+  _canvas.width  = Math.round(vw * _dpr);
+  _canvas.height = Math.round(vh * _dpr);
+  _canvas.style.width  = vw + 'px';
+  _canvas.style.height = vh + 'px';
+  _renderScale = Math.min(vw / S2C.W, vh / S2C.H);
+  _offX = Math.max(0, (vw - S2C.W * _renderScale) / 2);
+  _offY = Math.max(0, (vh - S2C.H * _renderScale) / 2);
+}
+
+// Limpia todo el buffer y fija la transformación de presentación del frame.
+function applyView() {
+  _ctx.setTransform(1, 0, 0, 1, 0, 0);
+  _ctx.fillStyle = '#000';
+  _ctx.fillRect(0, 0, _canvas.width, _canvas.height);
+  _ctx.setTransform(_dpr * _renderScale, 0, 0, _dpr * _renderScale, _offX * _dpr, _offY * _dpr);
 }
 
 function destroyCanvas() {
-  if (_resizeFn) { window.removeEventListener('resize', _resizeFn); _resizeFn = null; }
+  if (_resizeFn) {
+    window.removeEventListener('resize', _resizeFn);
+    window.removeEventListener('orientationchange', _resizeFn);
+    window.removeEventListener('fullscreenchange', _resizeFn);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', _resizeFn);
+    _resizeFn = null;
+  }
   if (_canvas && _canvas.parentNode) _canvas.parentNode.removeChild(_canvas);
   _canvas = null; _ctx = null;
 }
