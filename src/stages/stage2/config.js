@@ -174,15 +174,17 @@ const S2C = {
   },
 
   // Bus stop
+  // TODAS las micros (incluida la primera) LLEGAN desde fuera de pantalla hasta
+  // la parada, se detienen, abren la puerta y recién ahí arranca su cuenta.
   busStop: {
-    // La PRIMERA micro está presente al entrar con la puerta abierta y espera
-    // sólo firstBusWaitSeconds (reflejo). Las siguientes esperan doorOpenTime.
+    microStartX:      -320,  // X inicial fuera de pantalla (posición de llegada)
+    microStopX:        700,  // X exacta de la parada
+    microArriveFactor:   5,  // suavizado de la llegada (mayor = llega más rápido)
     firstBusWaitSeconds: 2.5, // s abierta la primera micro (ventana justa para abordar)
     doorOpenTime:     6.0,   // s abierta desde la 2ª micro en adelante
     nextBusDelay:     3.0,   // s hasta la siguiente micro tras perder una (penaliza el reloj global)
     microDepartX:    2200,   // X donde sale la micro
     microSpeedDepart: 320,
-    firstMicroX:      700,   // X de la primera micro (ya presente)
   },
 
   // Victoria — estrellas (según segundos restantes; presupuesto total 60 s).

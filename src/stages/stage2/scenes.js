@@ -701,10 +701,9 @@ function makeBusStop(assets, sm) {
       showMsg = gs._showMsg;
       doorOpen = false; missWait = 0; microCount = 1;
       buildEntities();
-      // 1ª micro YA presente y con la puerta ABIERTA desde el primer frame.
-      micro = makeMicro(BUS.firstMicroX, gY, assets);
-      micro.x = BUS.firstMicroX; micro.state = 'open';
-      doorOpen = true; doorTimer = BUS.firstBusWaitSeconds;
+      // 1ª micro LLEGA desde fuera de pantalla (state 'arriving'); se abre y
+      // arranca su cuenta regresiva sólo al detenerse en la parada.
+      micro = makeMicro(BUS.microStartX, gY, assets);
       gs.checkpoint = { scene: 'BUS_STOP', playerX: 600 };
     },
 
@@ -723,8 +722,10 @@ function makeBusStop(assets, sm) {
       if (micro && micro.active) {
         micro.update(dt);
         if (micro.state === 'open') {
-          if (!doorOpen) {  // micro 2ª+ recién abierta: ventana amplia (documentado)
-            doorOpen = true; doorTimer = BUS.doorOpenTime;
+          if (!doorOpen) {  // recién detenida y abierta: arranca su cuenta regresiva
+            doorOpen = true;
+            // 1ª micro: ventana justa (reflejo); 2ª+ : ventana amplia.
+            doorTimer = (microCount === 1) ? BUS.firstBusWaitSeconds : BUS.doorOpenTime;
           }
           doorTimer -= dt;
 
@@ -750,7 +751,7 @@ function makeBusStop(assets, sm) {
       if (missWait > 0) {
         missWait -= dt;
         if (missWait <= 0) {
-          micro = makeMicro(-250, gY, assets);  // 2ª+ llega desde la izquierda (más cerca)
+          micro = makeMicro(BUS.microStartX, gY, assets);  // 2ª+ también llega desde fuera de pantalla
           microCount++; doorOpen = false;
         }
       }

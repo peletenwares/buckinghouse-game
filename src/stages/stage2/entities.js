@@ -467,8 +467,8 @@ function makeMicro(startX, groundY, assets) {
 
     update: function(dt) {
       if (this.state === 'arriving') {
-        var target = 700;
-        this.x += (target - this.x) * Math.min(1, dt * 5);   // llegada más ágil (menos espera)
+        var target = S2C.busStop.microStopX;
+        this.x += (target - this.x) * Math.min(1, dt * S2C.busStop.microArriveFactor);
         if (Math.abs(this.x - target) < 2) { this.x = target; this.state = 'open'; }
       } else if (this.state === 'leaving') {
         this.x += S2C.busStop.microSpeedDepart * dt;
