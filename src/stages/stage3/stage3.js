@@ -21,7 +21,8 @@
 
   const C = {
     W: 1280, H: 720,
-    slingshot: { centerX: 640, bottomY: 720, scale: 0.30 },
+    // Escala reducida: la resortera ocupaba ~43% del alto (demasiado "encima").
+    slingshot: { centerX: 640, bottomY: 720, scale: 0.20 },
     pocket:    { offsetRatioY: 0.30 },
 
     // collisionOffsetX/Y: offset provisional desde (t.x, t.y) al centro visible.
@@ -52,7 +53,7 @@
     maxSpeed:        600,
     gravity:         300,
     hitRadius:       90,
-    clockScale:      0.12,
+    clockScale:      0.09,   // relojes más pequeños (menos "zoom")
     rotSpeed:        5.0,
     releaseDuration: 0.13,
     dtMax:           0.10,
@@ -96,16 +97,16 @@
 
     completionMessage: {
       text:        'No hay caso… no hay cómo despertarlos.',
-      font:        'bold 34px monospace',
-      padding:     20,
-      boxHeight:   64,
-      centerY:     360,
-      colorBox:    'rgba(0,0,0,0.68)',
-      colorBorder: 'rgba(255,255,255,0.55)',
-      borderWidth: 2,
+      font:        'bold 40px "Baloo 2","Nunito",system-ui,sans-serif',
+      padding:     34,      // márgenes internos amplios
+      boxHeight:   96,
+      centerY:     380,
+      colorBox:    'rgba(10,8,14,0.88)',   // panel de apoyo con fuerte contraste
+      colorBorder: 'rgba(255,255,255,0.85)',
+      borderWidth: 3,
       colorText:   '#ffffff',
       shadowColor: '#000000',
-      shadowBlur:  8,
+      shadowBlur:  10,
     },
   };
 
