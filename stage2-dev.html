@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <link rel="icon" href="data:,">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <title>Stage 2 Commute — Dev</title>
+  <style>body { margin: 0; overflow: hidden; background: #000; }</style>
+</head>
+<body>
+  <!-- Nueva Stage 2 oficial: trayecto Carmen 121 → Clínica -->
+  <script src="src/stages/stage2/config.js"></script>
+  <script src="src/stages/stage2/manifest.js"></script>
+  <script src="src/stages/stage2/input.js"></script>
+  <script src="src/stages/stage2/player.js"></script>
+  <script src="src/stages/stage2/entities.js"></script>
+  <script src="src/stages/stage2/scenes.js"></script>
+  <script src="src/stages/stage2/stage2.js"></script>
+  <script>
+    window.onerror = function(m,s,l) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#7a1b1b;color:#fff;font:12px monospace;padding:8px;z-index:99;white-space:pre-wrap';
+      d.textContent = 'Error: ' + m + ' (línea ' + l + ')';
+      document.body.appendChild(d);
+    };
+    Stage2.devStart();
+  </script>
+</body>
+</html>

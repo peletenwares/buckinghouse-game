@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="data:,">
+  <title>Stage 2 Commute — Galería debug de assets</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 24px; }
+    h1 { color: #f0c040; margin-bottom: 6px; font-size: 1.1rem; }
+    .badge { display:inline-block; background:#2a5; color:#fff; padding:2px 10px;
+             border-radius:4px; font-size:0.78rem; margin-bottom:20px; }
+    h2 { color: #90c0ff; font-size: 0.95rem; margin: 28px 0 10px;
+         border-bottom: 1px solid #334; padding-bottom: 4px; }
+    h3 { color: #ccc; font-size: 0.82rem; margin: 16px 0 5px; }
+    #status { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .as { padding: 3px 9px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #444; }
+    .as.ok  { border-color: #4c4; color: #4c4; }
+    .as.err { border-color: #c44; color: #c44; }
+    .grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+    .cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .cell canvas { border: 1px solid #444; background: repeating-conic-gradient(#2a2a3a 0% 25%, #1a1a2e 0% 50%) 0 0/12px 12px; }
+    .lbl { font-size: 0.62rem; color: #888; text-align: center; }
+    .full-wrap canvas { border: 1px solid #446; max-width: 100%; display: block; }
+    #summary { margin-top: 24px; font-size: 0.8rem; color: #aaa; }
+  </style>
+</head>
+<body>
+  <h1>Stage 2 Commute — Galería debug de assets</h1>
+  <div class="badge">OFICIAL — assets/stage2-commute/</div>
+  <p style="font-size:0.75rem;color:#666;margin-bottom:16px">
+    Content-box real por frame (recorte ajustado) | Fondos: 2084×755 imagen única.
+    Etapa 3 (despertarlos, antes wake-up): <a href="debug-stage3.html" style="color:#88f">debug-stage3.html</a>
+  </p>
+
+  <h2>Estado de carga</h2>
+  <div id="status">Cargando…</div>
+  <div id="gallery"></div>
+  <div id="summary"></div>
+
+  <script src="src/stages/stage2/config.js"></script>
+  <script src="src/stages/stage2/manifest.js"></script>
+  <script>
+    var THUMB = 100, FULL_W = 520;
+
+    function makeCanvas(w, h) {
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h; return c;
+    }
+
+    function renderFrame(img, def, frame, thumbH) {
+      // Renderiza el content-box real del frame (recorte ajustado).
+      var f = def.frames[frame];
+      var scale = thumbH / def.refH;
+      var dw = Math.max(1, Math.round(f.sw * scale)), dh = Math.max(1, Math.round(f.sh * scale));
+      var c = makeCanvas(dw, dh);
+      c.getContext('2d').drawImage(img, f.sx, f.sy, f.sw, f.sh, 0, 0, dw, dh);
+      return c;
+    }
+
+    function renderFull(img, def) {
+      var scale = Math.min(FULL_W / def.w, 1);
+      var dw = Math.round(def.w * scale), dh = Math.round(def.h * scale);
+      var c = makeCanvas(dw, dh);
+      c.getContext('2d').drawImage(img, 0, 0, def.w, def.h, 0, 0, dw, dh);
+      return c;
+    }
+
+    loadS2Assets().then(function(loaded) {
+      var panel = document.getElementById('status');
+      panel.innerHTML = '';
+      var okCount = 0, total = Object.keys(S2_MANIFEST).length;
+
+      Object.keys(loaded).forEach(function(key) {
+        var res = loaded[key];
+        var el = document.createElement('div');
+        el.className = 'as ' + (res.ok ? 'ok' : 'err');
+        el.title = res.src;
+        el.textContent = (res.ok ? '✓ ' : '✗ ') + key;
+        panel.appendChild(el);
+        if (res.ok) okCount++;
+      });
+
+      var gallery = document.getElementById('gallery');
+
+      // Grupos
+      var bgKeys     = ['bgApartment','bgCrossing','bgMetro','bgBusStop','bgClinic'];
+      var playerKeys = ['playerWalk','playerRun','playerIdle','playerJump','playerHurt','playerBip','playerWin','playerLose'];
+      var npcKeys    = ['vendor','pedestrian','velociraptor','velociraptor2','singerMale','singerFemale'];
+      var itemKeys   = ['bipCredit','bonusClock','headphones'];
+      var propKeys   = ['platWide','platMed','platSmall','platRest','barrierProp','busstopProp','turnstile','validator'];
+      var vehKeys    = ['autos','metro','micro'];
+
+      function section(title, keys) {
+        var h2 = document.createElement('h2'); h2.textContent = title; gallery.appendChild(h2);
+        keys.forEach(function(key) {
+          var def = S2_MANIFEST[key];
+          var res = loaded[key];
+          var nFrames = (def && def.frames) ? def.frames.length : 0;
+          var h3 = document.createElement('h3');
+          h3.textContent = key + ' — ' + (def ? def.src : '?') +
+            (nFrames ? '  [' + def.cols + '×' + def.rows + ' grilla → ' + nFrames + ' frames (content-box), anchor ' + def.anchor + ']' : '  [imagen única]');
+          gallery.appendChild(h3);
+          if (!res || !res.ok) {
+            var p = document.createElement('p'); p.style.color='#c44';
+            p.textContent = '✗ No cargó — ' + (res ? res.src : '?');
+            gallery.appendChild(p); return;
+          }
+          if (nFrames) {
+            var grid = document.createElement('div'); grid.className = 'grid';
+            for (var f = 0; f < nFrames; f++) {
+              var cell = document.createElement('div'); cell.className = 'cell';
+              cell.appendChild(renderFrame(res.img, def, f, THUMB));
+              var fb = def.frames[f];
+              var lbl = document.createElement('div'); lbl.className = 'lbl';
+              lbl.textContent = '#' + f + ' ' + fb.sw + '×' + fb.sh;
+              cell.appendChild(lbl); grid.appendChild(cell);
+            }
+            gallery.appendChild(grid);
+          } else {
+            var wrap = document.createElement('div'); wrap.className = 'full-wrap';
+            wrap.appendChild(renderFull(res.img, def)); gallery.appendChild(wrap);
+          }
+        });
+      }
+
+      section('Fondos (imagen única 2084×755)', bgKeys);
+      section('Jugadora — 8 hojas de animación', playerKeys);
+      section('NPCs', npcKeys);
+      section('Ítems', itemKeys);
+      section('Props', propKeys);
+      section('Vehículos', vehKeys);
+      section('FX', ['fx']);
+
+      document.getElementById('summary').innerHTML =
+        '<b>' + okCount + '/' + total + '</b> assets cargados. ' +
+        (okCount === total ? '<span style="color:#4c4">✓ Sin errores 404.</span>'
+                           : '<span style="color:#c44">✗ ' + (total-okCount) + ' fallaron.</span>');
+    });
+  </script>
+</body>
+</html>

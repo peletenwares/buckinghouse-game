@@ -40,3 +40,6 @@ desktop.ini
 # Temporales
 *.tmp
 *.temp
+
+# Artefactos de QA (capturas, reportes locales)
+artifacts/
