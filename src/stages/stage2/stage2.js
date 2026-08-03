@@ -510,7 +510,13 @@ function state() {
     timer: _gs ? _gs.timer : null,
     bipCount: _gs ? _gs.bipCount : null,
     bipBonus: _gs ? _gs.bipBonus : null,
+    score: _gs ? _gs.score : null,
+    hits: _gs ? _gs.hits : null,
+    falls: _gs ? _gs.falls : null,
+    caughtFirstBus: _gs ? _gs.caughtFirstBus : null,
     playerX: (_sm && _sm.scene && _sm.scene.getPlayer) ? _sm.scene.getPlayer().x : null,
+    playerY: (_sm && _sm.scene && _sm.scene.getPlayer) ? _sm.scene.getPlayer().y : null,
+    onGround: (_sm && _sm.scene && _sm.scene.getPlayer) ? !!(_sm.scene.getPlayer().onGround || _sm.scene.getPlayer().onPlatform) : null,
     laneHint: (_sm && _sm.scene && _sm.scene.laneHint) ? _sm.scene.laneHint() : null,
     boardHint: (_sm && _sm.scene && _sm.scene.boardHint) ? _sm.scene.boardHint() : null,
   };

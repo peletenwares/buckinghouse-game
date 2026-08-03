@@ -162,22 +162,22 @@ function makeApartmentRun(assets, sm) {
     vendors = [];
     if (B.apartmentVendorMax >= 1) { var vd = makeVendor(880, assets); vd.setGround(gY); vendors.push(vd); }
 
-    // Peatones lentos = obstáculo PRINCIPAL (4–6), repartidos entre los saldos.
+    // Peatones lentos = obstáculo principal, repartidos dentro del recorrido.
     pedestrians = [];
-    spreadX(pickCount(B.apartmentPedestrianCount), 380, 1780, 90).forEach(function(px) {
+    spreadX(pickCount(B.apartmentPedestrianCount), 340, 1300, 90).forEach(function(px) {
       var p = makePedestrian(px, assets); p.setGround(gY); pedestrians.push(p);
     });
 
     velociraptors = [];
 
-    // 6 saldos Bip repartidos ~12/30/48/67/84/95 % del recorrido (nunca juntos).
-    var pcts = [0.12, 0.30, 0.48, 0.67, 0.84, 0.95];
+    // 6 saldos Bip repartidos por el recorrido (nunca juntos), antes de la salida.
+    var pcts = [0.10, 0.26, 0.42, 0.58, 0.74, 0.90];
     items = pcts.map(function(pc) { return makeItem(Math.round(worldW * pc), gY - 74, 'bipCredit', assets); });
-    items.push(makeItem(1140, gY - 150, 'bonusClock', assets));
+    items.push(makeItem(760, gY - 150, 'bonusClock', assets));
   }
 
-  // 1 velociraptor como introducción, cerca del final.
-  var raptorSpawnPoints = [ { worldX: 1500, spawned: false } ];
+  // 1 velociraptor como introducción, cerca del final (dentro del recorrido).
+  var raptorSpawnPoints = [ { worldX: 1050, spawned: false } ];
 
   function checkRaptorSpawns() {
     raptorSpawnPoints.forEach(function(sp) {
@@ -743,15 +743,14 @@ function makeBusStop(assets, sm) {
             missWait = BUS.nextBusDelay;
           }
         }
-      } else if (micro && !micro.active) {
-        micro = null;
       }
 
-      // Espera de 5s y llega la siguiente micro (reloj global nunca se detiene).
-      if (!micro && missWait > 0) {
+      // La espera de la siguiente micro corre AUNQUE la anterior siga saliendo de
+      // cuadro (evita tiempo muerto). El reloj global nunca se detiene.
+      if (missWait > 0) {
         missWait -= dt;
         if (missWait <= 0) {
-          micro = makeMicro(-380, gY, assets);  // 2ª+ llega desde la izquierda
+          micro = makeMicro(-250, gY, assets);  // 2ª+ llega desde la izquierda (más cerca)
           microCount++; doorOpen = false;
         }
       }
